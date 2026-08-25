@@ -116,7 +116,7 @@ fun OrderItemsGridDialog(
                                 color = TextDark
                             )
                             Text(
-                                text = "Table: ${order.tableName ?: "Table ${order.tableId ?: "1"}"} • ${allGridItems.size} Total Items",
+                                text = "Table: ${order.tableNumber ?: "Table ${order.tableId ?: "1"}"} • ${allGridItems.size} Total Items",
                                 fontSize = 13.sp,
                                 color = TextMuted
                             )
