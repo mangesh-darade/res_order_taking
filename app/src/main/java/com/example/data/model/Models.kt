@@ -134,13 +134,23 @@ data class FinalizeOrderResponse(
 
 @JsonClass(generateAdapter = true)
 data class BrandingInfo(
-    @Json(name = "site_name") val siteName: String? = "ElintOm Restaurant",
-    @Json(name = "company_name") val companyName: String? = "ElintOm Dining",
+    @Json(name = "site_name") val siteName: String? = "Darbar Restaurant",
+    @Json(name = "company_name") val companyName: String? = "Darbar Restaurant",
     @Json(name = "mobile_app_name") val mobileAppName: String? = "Order Taking",
     @Json(name = "login_title") val loginTitle: String? = "Restaurant Order Taking",
     @Json(name = "logo_url") val logoUrl: String? = null,
     @Json(name = "webshop_logo_url") val webshopLogoUrl: String? = null,
-    @Json(name = "primary_color") val primaryColor: String? = "#E9176B"
+    @Json(name = "primary_color") val primaryColor: String? = "#E9176B",
+    @Json(name = "default_currency") val defaultCurrency: String? = "INR",
+    @Json(name = "currency_symbol") val currencySymbol: String? = "Rs",
+    @Json(name = "display_symbol") val displaySymbol: Int? = 1,
+    @Json(name = "timezone") val timezone: String? = "Asia/Kolkata",
+    @Json(name = "decimals") val decimals: Int? = 2,
+    @Json(name = "qty_decimals") val qtyDecimals: Int? = 3,
+    @Json(name = "decimals_sep") val decimalsSep: String? = ".",
+    @Json(name = "thousands_sep") val thousandsSep: String? = ",",
+    @Json(name = "server_time") val serverTime: String? = null,
+    @Json(name = "pos_type") val posType: String? = "restaurant"
 )
 
 @JsonClass(generateAdapter = true)
