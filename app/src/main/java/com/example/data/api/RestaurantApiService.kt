@@ -49,13 +49,15 @@ interface RestaurantApiService {
     @FormUrlEncoded
     @POST("increase_guest")
     suspend fun increaseGuest(
-        @Field("order_id") orderId: String
+        @Field("order_id") orderId: String,
+        @Field("table_id") tableId: String? = null
     ): Response<ApiResponse<OrderBootstrap>>
 
     @FormUrlEncoded
     @POST("decrease_guest")
     suspend fun decreaseGuest(
-        @Field("order_id") orderId: String
+        @Field("order_id") orderId: String,
+        @Field("table_id") tableId: String? = null
     ): Response<ApiResponse<OrderBootstrap>>
 
     @GET("menu_categories")

@@ -34,23 +34,23 @@ fun TableCard(
 
     // Background color based on table status
     val cardBg = when (statusLower) {
-        "occupied" -> Color(0xFFA2E5FF)       // Light Blue from reference image
-        "order-placed" -> Color(0xFFFFCC80)   // Warm Amber / Yellow
-        "served" -> Color(0xFF81D4FA)         // Served Light Cyan
-        "ready" -> Color(0xFFC8E6C9)          // Ready Light Green
-        "reserved" -> Color(0xFFE1BEE7)       // Reserved Light Purple
-        "free" -> Color(0xFFE0E0E0)           // Free Light Gray
-        else -> Color(0xFFF1F5F9)             // Available Soft Off-White
+        "occupied" -> Color(0xFFA2E5FF)                                       // Light Blue
+        "order-placed", "placed", "kitchen", "kot_sent" -> Color(0xFFFFCC80)   // Warm Amber / Yellow
+        "ready" -> Color(0xFFC8E6C9)                                          // Ready Light Green
+        "served" -> Color(0xFFFF7EB6)                                         // Rose / Pink (Served)
+        "reserved" -> Color(0xFFE1BEE7)                                       // Reserved Light Purple
+        "free" -> Color(0xFFE0E0E0)                                           // Free Light Gray
+        else -> Color(0xFFF1F5F9)                                             // Available Soft Off-White
     }
 
     val isAvailable = statusLower == "available"
-    val isOccupiedOrActive = statusLower in listOf("occupied", "order-placed", "served", "ready")
+    val isOccupiedOrActive = statusLower in listOf("occupied", "order-placed", "placed", "kitchen", "kot_sent", "served", "ready")
 
     val tableTextColor = when {
-        statusLower == "occupied" -> Color(0xFFB392C9)    // Pastel Purple from reference image
-        statusLower == "order-placed" -> Color(0xFFD97706)
-        statusLower == "served" -> Color(0xFF0284C7)
-        statusLower == "ready" -> Color(0xFF16A34A)
+        statusLower == "occupied" -> Color(0xFFB392C9)    // Pastel Purple
+        statusLower in listOf("order-placed", "placed", "kitchen", "kot_sent") -> Color(0xFFD97706) // Darker Amber
+        statusLower == "ready" -> Color(0xFF16A34A)       // Dark Green
+        statusLower == "served" -> Color(0xFF7A0030)      // Deep Rose / Burgundy
         statusLower == "reserved" -> Color(0xFF9333EA)
         else -> PinkPrimary
     }

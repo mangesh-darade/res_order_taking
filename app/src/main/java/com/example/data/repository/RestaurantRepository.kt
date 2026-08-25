@@ -107,7 +107,10 @@ class RestaurantRepository private constructor() {
         try {
             val response = api.getOrderBootstrap(tableId = tableId, orderId = orderId)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
-                response.body()?.data?.let { return@withContext Result.success(it) }
+                response.body()?.data?.let {
+                    val normalized = updateLocalOrder(it)
+                    return@withContext Result.success(normalized)
+                }
             }
         } catch (e: Exception) {
             // fallback
@@ -138,17 +141,23 @@ class RestaurantRepository private constructor() {
                 totalItems = 0,
                 grandTotal = 0.0
             )
-            _orders.value = _orders.value + existingOrder
+            val normalized = updateLocalOrder(existingOrder)
+            return@withContext Result.success(normalized)
         }
 
-        Result.success(existingOrder ?: OrderBootstrap(tableId = tableId ?: "1", tableNumber = "T-1"))
+        val resultOrder = existingOrder ?: OrderBootstrap(tableId = tableId ?: "1", tableNumber = "T-1")
+        val normalized = updateLocalOrder(resultOrder)
+        Result.success(normalized)
     }
 
     suspend fun createOrder(tableId: String, guestCount: Int): Result<OrderBootstrap> = withContext(Dispatchers.IO) {
         try {
             val response = api.createOrder(tableId, guestCount)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
-                response.body()?.data?.let { return@withContext Result.success(it) }
+                response.body()?.data?.let {
+                    val normalized = updateLocalOrder(it)
+                    return@withContext Result.success(normalized)
+                }
             }
         } catch (e: Exception) {
             // fallback
@@ -158,39 +167,48 @@ class RestaurantRepository private constructor() {
             order.guests.find { it.guestId == gId } ?: GuestOrder(guestId = gId, guestName = "Guest $gId")
         }
         val updated = order.copy(guestCount = guestCount, guests = updatedGuests)
-        updateLocalOrder(updated)
+        val normalized = updateLocalOrder(updated)
         // Mark table occupied
-        updateTableStatus(tableId, "occupied", guestCount, updated.orderId)
-        Result.success(updated)
+        updateTableStatus(tableId, "occupied", normalized.guestCount, normalized.orderId)
+        Result.success(normalized)
     }
 
-    suspend fun updateGuestCount(orderId: String, delta: Int): Result<OrderBootstrap> = withContext(Dispatchers.IO) {
+    suspend fun updateGuestCount(orderId: String, delta: Int, tableId: String? = null): Result<OrderBootstrap> = withContext(Dispatchers.IO) {
         try {
-            val response = if (delta > 0) api.increaseGuest(orderId) else api.decreaseGuest(orderId)
+            val response = if (delta > 0) api.increaseGuest(orderId, tableId) else api.decreaseGuest(orderId, tableId)
             val body = response.body()
             if (response.isSuccessful && (body?.response?.status.equals("SUCCESS", ignoreCase = true) || body?.data != null)) {
                 body?.data?.let {
-                    updateLocalOrder(it)
-                    return@withContext Result.success(it)
+                    val normalized = updateLocalOrder(it)
+                    return@withContext Result.success(normalized)
                 }
             }
         } catch (e: Exception) {
             // fallback
         }
-        val cleanTableId = orderId.removePrefix("ORD-").split("-").firstOrNull()
+        val cleanTableId = tableId ?: orderId.removePrefix("ORD-").split("-").firstOrNull()
         val order = _orders.value.find { 
-            it.orderId == orderId || (cleanTableId != null && it.tableId == cleanTableId)
-        } ?: return@withContext Result.failure(Exception("Order not found"))
+            (!it.orderId.isNullOrBlank() && it.orderId == orderId) || (cleanTableId != null && it.tableId == cleanTableId)
+        } ?: _orders.value.firstOrNull() ?: return@withContext Result.failure(Exception("Order not found"))
 
-        val newCount = (order.guestCount + delta).coerceAtLeast(1)
-        val guests = if (newCount > order.guests.size) {
-            order.guests + (order.guests.size + 1..newCount).map { GuestOrder(guestId = it, guestName = "Guest $it") }
+        val currentIndividualGuests = order.guests.filter { it.guestId != 0 }
+        val currentGuestCount = maxOf(order.guestCount, currentIndividualGuests.size, 1)
+        val newCount = (currentGuestCount + delta).coerceAtLeast(1)
+
+        val guests = if (newCount > currentIndividualGuests.size) {
+            currentIndividualGuests + (currentIndividualGuests.size + 1..newCount).map { 
+                GuestOrder(guestId = it, guestName = "Guest $it") 
+            }
         } else {
-            order.guests.take(newCount)
+            // Keep at least newCount guests
+            val trimmed = currentIndividualGuests.take(newCount)
+            trimmed
         }
-        val updated = order.copy(guestCount = newCount, guests = guests)
-        updateLocalOrder(updated)
-        Result.success(updated)
+        val tableItemsGuest = order.guests.find { it.guestId == 0 }
+        val allGuests = if (tableItemsGuest != null) listOf(tableItemsGuest) + guests else guests
+        val updated = order.copy(guestCount = newCount, guests = allGuests)
+        val normalized = updateLocalOrder(updated)
+        Result.success(normalized)
     }
 
     suspend fun fetchMenuCategories(): Result<List<MenuCategory>> = withContext(Dispatchers.IO) {
@@ -283,7 +301,10 @@ class RestaurantRepository private constructor() {
                 specialInstructions = specialInstructions
             )
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
-                response.body()?.data?.let { return@withContext Result.success(it) }
+                response.body()?.data?.let {
+                    val normalized = updateLocalOrder(it)
+                    return@withContext Result.success(normalized)
+                }
             }
         } catch (e: Exception) {
             // fallback
@@ -343,7 +364,10 @@ class RestaurantRepository private constructor() {
         try {
             val response = if (newQty <= 0) api.deleteItem(itemId) else api.updateItem(itemId, newQty)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
-                response.body()?.data?.let { return@withContext Result.success(it) }
+                response.body()?.data?.let {
+                    val normalized = updateLocalOrder(it)
+                    return@withContext Result.success(normalized)
+                }
             }
         } catch (e: Exception) {
             // fallback
@@ -364,15 +388,18 @@ class RestaurantRepository private constructor() {
             grandTotal = grandTotal,
             totalItems = totalItems
         )
-        updateLocalOrder(updatedOrder)
-        Result.success(updatedOrder)
+        val normalized = updateLocalOrder(updatedOrder)
+        Result.success(normalized)
     }
 
     suspend fun sendKot(orderId: String): Result<OrderBootstrap> = withContext(Dispatchers.IO) {
         try {
             val response = api.updateKotStatus(orderId)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
-                response.body()?.data?.let { return@withContext Result.success(it) }
+                response.body()?.data?.let {
+                    val normalized = updateLocalOrder(it)
+                    return@withContext Result.success(normalized)
+                }
             }
         } catch (e: Exception) {
             // fallback
@@ -382,18 +409,21 @@ class RestaurantRepository private constructor() {
             g.copy(items = g.items.map { item -> item.copy(status = "kot") })
         }
         val updatedOrder = order.copy(status = "kot_sent", guests = updatedGuests)
-        updateLocalOrder(updatedOrder)
+        val normalized = updateLocalOrder(updatedOrder)
         if (order.tableId != null) {
-            updateTableStatus(order.tableId, "order-placed", order.guestCount, orderId)
+            updateTableStatus(order.tableId, "order-placed", normalized.guestCount, orderId)
         }
-        Result.success(updatedOrder)
+        Result.success(normalized)
     }
 
     suspend fun markOrderServed(orderId: String): Result<OrderBootstrap> = withContext(Dispatchers.IO) {
         try {
             val response = api.markServed(orderId)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
-                response.body()?.data?.let { return@withContext Result.success(it) }
+                response.body()?.data?.let {
+                    val normalized = updateLocalOrder(it)
+                    return@withContext Result.success(normalized)
+                }
             }
         } catch (e: Exception) {
             // fallback
@@ -403,11 +433,11 @@ class RestaurantRepository private constructor() {
             g.copy(items = g.items.map { item -> item.copy(status = "served") })
         }
         val updatedOrder = order.copy(status = "served", guests = updatedGuests)
-        updateLocalOrder(updatedOrder)
+        val normalized = updateLocalOrder(updatedOrder)
         if (order.tableId != null) {
-            updateTableStatus(order.tableId, "served", order.guestCount, orderId)
+            updateTableStatus(order.tableId, "served", normalized.guestCount, orderId)
         }
-        Result.success(updatedOrder)
+        Result.success(normalized)
     }
 
     suspend fun finalizeOrder(orderId: String): Result<FinalizeOrderResponse> = withContext(Dispatchers.IO) {
@@ -449,11 +479,29 @@ class RestaurantRepository private constructor() {
         Result.success(true)
     }
 
-    private fun updateLocalOrder(order: OrderBootstrap) {
+    private fun updateLocalOrder(order: OrderBootstrap): OrderBootstrap {
+        val individualGuests = order.guests.filter { it.guestId != 0 }
+        val normalizedGuestCount = maxOf(order.guestCount, individualGuests.size, 1)
+
+        val tableItemsGuest = order.guests.find { it.guestId == 0 } ?: GuestOrder(guestId = 0, guestName = "Table Items (All Guests)", items = emptyList())
+        val guaranteedGuests = (1..normalizedGuestCount).map { gId ->
+            individualGuests.find { it.guestId == gId } ?: GuestOrder(guestId = gId, guestName = "Guest $gId")
+        }
+        val fullGuestsList = listOf(tableItemsGuest) + guaranteedGuests
+
+        val normalizedOrder = order.copy(
+            guestCount = normalizedGuestCount,
+            guests = fullGuestsList
+        )
+
         val list = _orders.value.toMutableList()
-        val index = list.indexOfFirst { it.orderId == order.orderId }
-        if (index >= 0) list[index] = order else list.add(order)
+        val index = list.indexOfFirst { 
+            (!it.orderId.isNullOrBlank() && it.orderId == normalizedOrder.orderId) || 
+            (!it.tableId.isNullOrBlank() && it.tableId == normalizedOrder.tableId)
+        }
+        if (index >= 0) list[index] = normalizedOrder else list.add(normalizedOrder)
         _orders.value = list
+        return normalizedOrder
     }
 
     private fun updateTableStatus(tableId: String, newStatus: String, guests: Int = 0, orderId: String? = null) {

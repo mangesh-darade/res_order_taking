@@ -4,9 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.model.TableItem
 import com.example.data.repository.RestaurantRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class TablesUiState(
@@ -27,6 +30,22 @@ class TablesViewModel(
     private val _uiState = MutableStateFlow(TablesUiState())
     val uiState: StateFlow<TablesUiState> = _uiState.asStateFlow()
 
+    private var autoRefreshJob: Job? = null
+
+    init {
+        startAutoRefresh()
+    }
+
+    fun startAutoRefresh() {
+        autoRefreshJob?.cancel()
+        autoRefreshJob = viewModelScope.launch {
+            while (isActive) {
+                delay(3000)
+                loadTables(silent = true)
+            }
+        }
+    }
+
     fun setSectionContext(secId: String, secName: String, subId: String?, subName: String?) {
         _uiState.value = _uiState.value.copy(
             sectionId = secId,
@@ -34,12 +53,14 @@ class TablesViewModel(
             subsectionId = subId,
             subsectionName = subName
         )
-        loadTables()
+        loadTables(silent = false)
     }
 
-    fun loadTables() {
+    fun loadTables(silent: Boolean = false) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+            if (!silent && _uiState.value.tables.isEmpty()) {
+                _uiState.value = _uiState.value.copy(isLoading = true)
+            }
             val secId = _uiState.value.sectionId
             val subId = _uiState.value.subsectionId
             val result = repository.fetchTables(secId, subId)
@@ -49,7 +70,9 @@ class TablesViewModel(
                     tables = list
                 )
             }.onFailure {
-                _uiState.value = _uiState.value.copy(isLoading = false)
+                if (!silent) {
+                    _uiState.value = _uiState.value.copy(isLoading = false)
+                }
             }
         }
     }
@@ -67,11 +90,16 @@ class TablesViewModel(
             repository.freeTable(tableId)
             dismissConfirmDialog()
             _uiState.value = _uiState.value.copy(snackbarMessage = "Table freed successfully")
-            loadTables()
+            loadTables(silent = true)
         }
     }
 
     fun clearSnackbarMessage() {
         _uiState.value = _uiState.value.copy(snackbarMessage = null)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        autoRefreshJob?.cancel()
     }
 }
