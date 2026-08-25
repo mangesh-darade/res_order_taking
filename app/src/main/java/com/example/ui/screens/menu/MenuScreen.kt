@@ -63,8 +63,13 @@ fun MenuScreen(
             // Pink header WITH back arrow + title "Menu"
             TopAppBar(
                 title = {
+                    val titleText = if (guestId == 0) {
+                        "Menu - Table ${uiState.tableId} (All Guests)"
+                    } else {
+                        "Menu - Guest $guestId (Table ${uiState.tableId})"
+                    }
                     Text(
-                        text = "Menu - Guest $guestId (Table ${uiState.tableId})",
+                        text = titleText,
                         color = Color.White,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold

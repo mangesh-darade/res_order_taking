@@ -300,7 +300,8 @@ class RestaurantRepository private constructor() {
         // Ensure guest with guestId exists in order
         val existingGuest = order.guests.find { it.guestId == guestId }
         val baseGuests = if (existingGuest == null) {
-            order.guests + GuestOrder(guestId = guestId, guestName = "Guest $guestId", items = emptyList())
+            val name = if (guestId == 0) "Table Items (All Guests)" else "Guest $guestId"
+            order.guests + GuestOrder(guestId = guestId, guestName = name, items = emptyList())
         } else {
             order.guests
         }
@@ -314,7 +315,6 @@ class RestaurantRepository private constructor() {
         val totalItems = updatedGuests.flatMap { it.items }.sumOf { it.quantity }
         val updatedOrder = order.copy(
             guests = updatedGuests,
-            guestCount = maxOf(order.guestCount, updatedGuests.size),
             grandTotal = grandTotal,
             totalItems = totalItems
         )

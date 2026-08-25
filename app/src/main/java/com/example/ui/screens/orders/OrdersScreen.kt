@@ -345,8 +345,9 @@ fun OrdersScreen(
                         items(order.guests) { guest ->
                             val isSelected = uiState.selectedGuestFilter == guest.guestId
                             val isServed = guest.items.isNotEmpty() && guest.items.all { it.status == "ready" || it.status == "served" }
+                            val label = if (guest.guestId == 0) "Table Items" else "Guest ${guest.guestId}"
                             GuestChip(
-                                label = "Guest ${guest.guestId}",
+                                label = label,
                                 isSelected = isSelected,
                                 isServed = isServed,
                                 onClick = { viewModel.selectGuestFilter(guest.guestId) }
@@ -356,11 +357,16 @@ fun OrdersScreen(
 
                     Spacer(modifier = Modifier.height(6.dp))
 
-                    // Guest Accordion List
-                    val filteredGuests = if (uiState.selectedGuestFilter == 0) {
-                        order.guests
-                    } else {
-                        order.guests.filter { it.guestId == uiState.selectedGuestFilter }
+                    // Guest Accordion List (with All Guests / Table Common Card at top)
+                    val filteredGuests = remember(order.guests, uiState.selectedGuestFilter) {
+                        if (uiState.selectedGuestFilter == 0) {
+                            val commonGuest = order.guests.find { it.guestId == 0 } 
+                                ?: GuestOrder(guestId = 0, guestName = "Table Items (All Guests)", items = emptyList())
+                            val individualGuests = order.guests.filter { it.guestId != 0 }
+                            listOf(commonGuest) + individualGuests
+                        } else {
+                            order.guests.filter { it.guestId == uiState.selectedGuestFilter }
+                        }
                     }
 
                     LazyColumn(
@@ -428,13 +434,21 @@ fun GuestAccordionCard(
     onQtyChange: (itemId: String, newQty: Int) -> Unit
 ) {
     var expanded by remember { mutableStateOf(true) }
+    val isCommonGuest = guest.guestId == 0
+    val displayName = if (isCommonGuest) "Table Items (All Guests)" else (guest.guestName ?: "Guest ${guest.guestId}")
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(10.dp)),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+            .border(
+                1.dp, 
+                if (isCommonGuest) PinkPrimary.copy(alpha = 0.5f) else Color(0xFFE0E0E0), 
+                RoundedCornerShape(10.dp)
+            ),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isCommonGuest) Color(0xFFFFF7F9) else Color.White
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -442,7 +456,7 @@ fun GuestAccordionCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFFFAFAFA))
+                    .background(if (isCommonGuest) PinkLightBg.copy(alpha = 0.6f) else Color(0xFFFAFAFA))
                     .clickable { expanded = !expanded }
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -450,10 +464,10 @@ fun GuestAccordionCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "Guest ${guest.guestId}",
+                        text = displayName,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextDark
+                        color = if (isCommonGuest) PinkPrimary else TextDark
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
@@ -464,14 +478,18 @@ fun GuestAccordionCard(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // "+" button on guest header -> opens Menu for this guest
+                    // "+" button on header -> opens Menu for this guest / table
                     IconButton(
                         onClick = onAddItemsClick,
                         modifier = Modifier
                             .size(32.dp)
-                            .background(PinkLightBg, CircleShape)
+                            .background(if (isCommonGuest) PinkPrimary else PinkLightBg, CircleShape)
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Add Item for Guest", tint = PinkPrimary)
+                        Icon(
+                            imageVector = Icons.Default.Add, 
+                            contentDescription = "Add Item", 
+                            tint = if (isCommonGuest) Color.White else PinkPrimary
+                        )
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
@@ -492,8 +510,13 @@ fun GuestAccordionCard(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (guest.items.isEmpty()) {
+                        val emptyMsg = if (isCommonGuest) {
+                            "No common table items yet. Tap '+' to add items for all guests (e.g. Water, Roti, Salad)."
+                        } else {
+                            "No items added for Guest ${guest.guestId}. Tap '+' to add menu items."
+                        }
                         Text(
-                            text = "No items added for Guest ${guest.guestId}. Tap '+' to add menu items.",
+                            text = emptyMsg,
                             fontSize = 13.sp,
                             color = TextMuted,
                             modifier = Modifier.padding(12.dp)

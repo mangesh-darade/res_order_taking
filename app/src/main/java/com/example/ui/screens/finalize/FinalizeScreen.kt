@@ -261,8 +261,9 @@ fun FinalizeScreen(
                                 colors = CardDefaults.cardColors(containerColor = Color.White)
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
+                                    val gName = if (guest.guestId == 0) "Table Items (All Guests)" else (guest.guestName ?: "Guest ${guest.guestId}")
                                     Text(
-                                        text = "Guest ${guest.guestId}",
+                                        text = gName,
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = PinkPrimary,

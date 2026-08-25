@@ -137,8 +137,13 @@ class MenuViewModel(
 
             result.onSuccess {
                 closeCustomizationSheet()
+                val msg = if (_uiState.value.guestId == 0) {
+                    "Added ${item.name} x$qty for All Guests (Table)"
+                } else {
+                    "Added ${item.name} x$qty to Guest ${_uiState.value.guestId}"
+                }
                 _uiState.value = _uiState.value.copy(
-                    snackbarMessage = "Added ${item.name} x$qty to Guest ${_uiState.value.guestId}"
+                    snackbarMessage = msg
                 )
             }.onFailure { err ->
                 _uiState.value = _uiState.value.copy(
