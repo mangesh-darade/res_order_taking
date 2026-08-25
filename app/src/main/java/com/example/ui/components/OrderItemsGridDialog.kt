@@ -396,7 +396,7 @@ fun GridItemCard(
                     color = TextMuted
                 )
                 Text(
-                    text = "$${String.format("%.2f", item.amount)}",
+                    text = "$${String.format("%.2f", item.price * item.quantity)}",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = PinkPrimary
