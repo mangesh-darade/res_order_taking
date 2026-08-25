@@ -1,0 +1,6 @@
+{
+  "name": "ElintOM Restaurant POS",
+  "description": "ElintOM Restaurant Order Taking native Android application",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

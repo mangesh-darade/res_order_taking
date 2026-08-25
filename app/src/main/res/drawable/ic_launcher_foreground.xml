@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Plate / Dining emblem in clean white -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,28c-14.36,0 -26,11.64 -26,26s11.64,26 26,26 26,-11.64 26,-26 -11.64,-26 -26,-26zM54,74c-11.05,0 -20,-8.95 -20,-20s8.95,-20 20,-20 20,8.95 20,20 -8.95,20 -20,20z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,38c-8.84,0 -16,7.16 -16,16s7.16,16 16,16 16,-7.16 16,-16 -7.16,-16 -16,-16z"/>
+    <!-- Fork left -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M22,34v12c0,3.31 2.69,6 6,6v22h4V52c3.31,0 6,-2.69 6,-6V34h-3v8h-2v-8h-2v8h-2v-8h-3z"/>
+    <!-- Knife right -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M80,34c-4.42,0 -8,3.58 -8,8v10h4v22h4V34h-0z"/>
+</vector>
