@@ -30,8 +30,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.model.GuestOrder
 import com.example.data.model.OrderItem
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.ReceiptLong
 import com.example.ui.components.InvoiceDialog
+import com.example.ui.components.OrderItemsGridDialog
 import com.example.ui.components.MainTab
 import com.example.ui.components.SharedTabStrip
 import com.example.ui.components.TopHeaderBar
@@ -50,6 +52,8 @@ fun OrdersScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var tableDropdownExpanded by remember { mutableStateOf(false) }
     var showInvoiceDialog by remember { mutableStateOf(false) }
+    var showGridPopup by remember { mutableStateOf(false) }
+    var gridPopupInitialGuest by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(initialTableId) {
         if (initialTableId != null) {
@@ -300,6 +304,26 @@ fun OrdersScreen(
                                 color = PinkPrimary
                             )
                             Spacer(modifier = Modifier.width(6.dp))
+                            // ⊞ Grid View Button (Opens Grid Popup)
+                            IconButton(
+                                onClick = {
+                                    gridPopupInitialGuest = null
+                                    showGridPopup = true
+                                },
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(PinkLightBg, CircleShape)
+                                    .testTag("preview_grid_icon_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.GridView,
+                                    contentDescription = "View Items Grid Popup",
+                                    tint = PinkPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            // 🧾 Thermal Invoice Receipt Preview Button
                             IconButton(
                                 onClick = { showInvoiceDialog = true },
                                 modifier = Modifier
@@ -321,6 +345,20 @@ fun OrdersScreen(
                         InvoiceDialog(
                             order = order,
                             onDismissRequest = { showInvoiceDialog = false }
+                        )
+                    }
+
+                    if (showGridPopup) {
+                        OrderItemsGridDialog(
+                            order = order,
+                            initialGuestFilter = gridPopupInitialGuest,
+                            onQtyChange = { itemId, newQty ->
+                                viewModel.updateItemQty(itemId, newQty)
+                            },
+                            onKotClick = {
+                                viewModel.sendKot()
+                            },
+                            onDismissRequest = { showGridPopup = false }
                         )
                     }
 
@@ -384,6 +422,10 @@ fun OrdersScreen(
                                 },
                                 onQtyChange = { itemId, newQty ->
                                     viewModel.updateItemQty(itemId, newQty)
+                                },
+                                onItemClick = {
+                                    gridPopupInitialGuest = guest.guestId
+                                    showGridPopup = true
                                 }
                             )
                         }
@@ -431,7 +473,8 @@ fun GuestChip(
 fun GuestAccordionCard(
     guest: GuestOrder,
     onAddItemsClick: () -> Unit,
-    onQtyChange: (itemId: String, newQty: Int) -> Unit
+    onQtyChange: (itemId: String, newQty: Int) -> Unit,
+    onItemClick: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(true) }
     val isCommonGuest = guest.guestId == 0
@@ -525,7 +568,8 @@ fun GuestAccordionCard(
                         guest.items.forEach { item ->
                             OrderItemCard(
                                 item = item,
-                                onQtyChange = { newQty -> onQtyChange(item.id, newQty) }
+                                onQtyChange = { newQty -> onQtyChange(item.id, newQty) },
+                                onItemClick = onItemClick
                             )
                         }
                     }
@@ -538,7 +582,8 @@ fun GuestAccordionCard(
 @Composable
 fun OrderItemCard(
     item: OrderItem,
-    onQtyChange: (Int) -> Unit
+    onQtyChange: (Int) -> Unit,
+    onItemClick: () -> Unit
 ) {
     val isReady = item.status == "ready" || item.status == "served"
     val cardBg = if (isReady) GreenReadyTint.copy(alpha = 0.3f) else Color.White
@@ -547,7 +592,8 @@ fun OrderItemCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .border(1.dp, if (isReady) GreenReadyTint else Color(0xFFEEEEEE), RoundedCornerShape(8.dp)),
+            .border(1.dp, if (isReady) GreenReadyTint else Color(0xFFEEEEEE), RoundedCornerShape(8.dp))
+            .clickable { onItemClick() },
         colors = CardDefaults.cardColors(containerColor = cardBg)
     ) {
         Column(
