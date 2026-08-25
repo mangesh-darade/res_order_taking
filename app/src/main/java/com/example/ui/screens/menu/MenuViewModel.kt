@@ -35,6 +35,9 @@ class MenuViewModel(
 
     fun initialize(tableId: String, guestId: Int) {
         _uiState.value = _uiState.value.copy(tableId = tableId, guestId = guestId)
+        viewModelScope.launch {
+            repository.fetchBranding()
+        }
         loadCategories()
         loadOrderContext(tableId)
     }
@@ -135,7 +138,7 @@ class MenuViewModel(
                 specialInstructions = specialInstructions
             )
 
-            result.onSuccess {
+            result.onSuccess { bootstrap ->
                 closeCustomizationSheet()
                 val msg = if (_uiState.value.guestId == 0) {
                     "Added ${item.name} x$qty for All Guests (Table)"
@@ -143,6 +146,7 @@ class MenuViewModel(
                     "Added ${item.name} x$qty to Guest ${_uiState.value.guestId}"
                 }
                 _uiState.value = _uiState.value.copy(
+                    orderId = bootstrap.orderId ?: _uiState.value.orderId,
                     snackbarMessage = msg
                 )
             }.onFailure { err ->

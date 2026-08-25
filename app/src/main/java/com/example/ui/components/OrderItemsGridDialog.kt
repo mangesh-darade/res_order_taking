@@ -239,7 +239,7 @@ fun OrderItemsGridDialog(
                             color = TextMuted
                         )
                         Text(
-                            text = "$${String.format("%.2f", order.grandTotal)}",
+                            text = com.example.util.CurrencyConfig.format(order.grandTotal),
                             fontSize = 20.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = PinkPrimary
@@ -391,12 +391,12 @@ fun GridItemCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "$${String.format("%.2f", item.price)} each",
+                    text = "${com.example.util.CurrencyConfig.format(item.price)} each",
                     fontSize = 12.sp,
                     color = TextMuted
                 )
                 Text(
-                    text = "$${String.format("%.2f", item.price * item.quantity)}",
+                    text = com.example.util.CurrencyConfig.format(item.price * item.quantity),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = PinkPrimary

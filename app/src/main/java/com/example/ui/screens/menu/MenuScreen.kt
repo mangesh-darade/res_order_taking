@@ -35,6 +35,7 @@ import coil.compose.AsyncImage
 import com.example.data.model.MenuItem
 import com.example.data.model.ProductCustomization
 import com.example.ui.theme.*
+import com.example.util.CurrencyConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -355,7 +356,7 @@ fun MenuItemCard(
                 }
 
                 Text(
-                    text = "$${String.format("%.2f", item.price)}",
+                    text = CurrencyConfig.format(item.price),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = PinkPrimary
@@ -448,7 +449,7 @@ fun CustomizationBottomSheet(
                         toppingsList.forEach { top ->
                             val isChecked = selectedToppings.contains(top.name)
                             CustomSelectableChip(
-                                label = "${top.name} (+$${top.price})",
+                                label = "${top.name} (+${CurrencyConfig.format(top.price)})",
                                 isSelected = isChecked,
                                 onClick = {
                                     if (isChecked) selectedToppings.remove(top.name) else selectedToppings.add(top.name)
@@ -468,7 +469,7 @@ fun CustomizationBottomSheet(
                         addOnsList.forEach { addOn ->
                             val isChecked = selectedAddOns.contains(addOn.name)
                             CustomSelectableChip(
-                                label = "${addOn.name} (+$${addOn.price})",
+                                label = "${addOn.name} (+${CurrencyConfig.format(addOn.price)})",
                                 isSelected = isChecked,
                                 onClick = {
                                     if (isChecked) selectedAddOns.remove(addOn.name) else selectedAddOns.add(addOn.name)

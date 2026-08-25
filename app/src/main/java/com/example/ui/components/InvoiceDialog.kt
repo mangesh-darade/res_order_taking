@@ -178,7 +178,7 @@ fun InvoiceDialog(
                                     ) {
                                         Text(item.productName, fontSize = 11.sp, modifier = Modifier.weight(2f))
                                         Text("${item.quantity}", fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(0.8f))
-                                        Text("$${String.format("%.2f", item.price * item.quantity)}", fontSize = 11.sp, textAlign = TextAlign.End, modifier = Modifier.weight(1.2f))
+                                        Text(com.example.util.CurrencyConfig.format(item.price * item.quantity), fontSize = 11.sp, textAlign = TextAlign.End, modifier = Modifier.weight(1.2f))
                                     }
                                 }
                             }
@@ -191,18 +191,18 @@ fun InvoiceDialog(
                         // Totals
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Subtotal", fontSize = 12.sp, color = TextMuted)
-                            Text("$${String.format("%.2f", subtotal)}", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Text(com.example.util.CurrencyConfig.format(subtotal), fontSize = 12.sp, fontWeight = FontWeight.Medium)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("Taxes & GST (5%)", fontSize = 12.sp, color = TextMuted)
-                            Text("$${String.format("%.2f", taxAmount)}", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Text(com.example.util.CurrencyConfig.format(taxAmount), fontSize = 12.sp, fontWeight = FontWeight.Medium)
                         }
 
                         Spacer(modifier = Modifier.height(4.dp))
 
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("GRAND TOTAL", fontSize = 15.sp, fontWeight = FontWeight.Black, color = TextDark)
-                            Text("$${String.format("%.2f", grandTotal)}", fontSize = 16.sp, fontWeight = FontWeight.Black, color = PinkPrimary)
+                            Text(com.example.util.CurrencyConfig.format(grandTotal), fontSize = 16.sp, fontWeight = FontWeight.Black, color = PinkPrimary)
                         }
                     }
                 }

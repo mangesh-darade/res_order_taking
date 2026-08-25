@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.ReceiptLong
 import com.example.ui.components.InvoiceDialog
 import com.example.ui.components.TopHeaderBar
 import com.example.ui.theme.*
+import com.example.util.CurrencyConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,7 +92,7 @@ fun FinalizeScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Total Amount", fontSize = 12.sp, color = Color.White.copy(alpha = 0.9f))
                             Text(
-                                text = "$${String.format("%.2f", order?.grandTotal ?: uiState.finalizeResult?.grandTotal ?: 0.0)}",
+                                text = CurrencyConfig.format(order?.grandTotal ?: uiState.finalizeResult?.grandTotal ?: 0.0),
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Black,
                                 color = Color.White
@@ -284,7 +285,7 @@ fun FinalizeScreen(
                                                 color = TextDark
                                             )
                                             Text(
-                                                text = "$${String.format("%.2f", item.price * item.quantity)}",
+                                                text = CurrencyConfig.format(item.price * item.quantity),
                                                 fontSize = 14.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = TextDark

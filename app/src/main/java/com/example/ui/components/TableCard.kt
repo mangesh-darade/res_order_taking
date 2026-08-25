@@ -6,7 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material3.*
@@ -18,7 +18,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.TableItem
@@ -33,34 +32,40 @@ fun TableCard(
 ) {
     val statusLower = table.status.lowercase()
 
+    // Background color based on table status
     val cardBg = when (statusLower) {
-        "occupied" -> StatusOccupiedBg
-        "reserved" -> StatusReservedBg
-        "order-placed" -> StatusOrderPlacedBg
-        "ready" -> StatusReadyBg
-        "free" -> StatusFreeBg
-        "served" -> StatusServedBg
-        else -> StatusAvailableBg // available
+        "occupied" -> Color(0xFFA2E5FF)       // Light Blue from reference image
+        "order-placed" -> Color(0xFFFFCC80)   // Warm Amber / Yellow
+        "served" -> Color(0xFF81D4FA)         // Served Light Cyan
+        "ready" -> Color(0xFFC8E6C9)          // Ready Light Green
+        "reserved" -> Color(0xFFE1BEE7)       // Reserved Light Purple
+        "free" -> Color(0xFFE0E0E0)           // Free Light Gray
+        else -> Color(0xFFF1F5F9)             // Available Soft Off-White
     }
 
-    val isDarkBackground = statusLower in listOf("order-placed", "served")
-    val titleColor = when {
-        isDarkBackground -> Color.White
-        statusLower == "available" -> PinkPrimary
-        statusLower == "occupied" -> PinkPrimary
-        else -> TextDark
+    val isAvailable = statusLower == "available"
+    val isOccupiedOrActive = statusLower in listOf("occupied", "order-placed", "served", "ready")
+
+    val tableTextColor = when {
+        statusLower == "occupied" -> Color(0xFFB392C9)    // Pastel Purple from reference image
+        statusLower == "order-placed" -> Color(0xFFD97706)
+        statusLower == "served" -> Color(0xFF0284C7)
+        statusLower == "ready" -> Color(0xFF16A34A)
+        statusLower == "reserved" -> Color(0xFF9333EA)
+        else -> PinkPrimary
     }
 
-    val cardShape = RoundedCornerShape(12.dp)
+    val displayTime = formatDisplayTime(table.occupiedTime)
+    val cardShape = RoundedCornerShape(16.dp)
 
     Card(
         modifier = modifier
-            .height(115.dp)
+            .height(95.dp)
             .fillMaxWidth()
             .clip(cardShape)
             .border(
-                width = if (statusLower == "available") 1.5.dp else 0.dp,
-                color = if (statusLower == "available") PinkPrimary.copy(alpha = 0.4f) else Color.Transparent,
+                width = if (isAvailable) 1.5.dp else 0.dp,
+                color = if (isAvailable) PinkPrimary.copy(alpha = 0.35f) else Color.Transparent,
                 shape = cardShape
             )
             .clickable { onClick() }
@@ -69,145 +74,132 @@ fun TableCard(
         colors = CardDefaults.cardColors(containerColor = cardBg),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // 1. TOP ROW: Occupied Time (Left) & Status Pill (Right)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (!table.occupiedTime.isNullOrBlank()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AccessTime,
-                            contentDescription = null,
-                            modifier = Modifier.size(11.dp),
-                            tint = if (isDarkBackground) Color.White.copy(alpha = 0.85f) else TextDark.copy(alpha = 0.7f)
-                        )
-                        Text(
-                            text = table.occupiedTime!!,
-                            fontSize = 9.sp,
-                            color = if (isDarkBackground) Color.White.copy(alpha = 0.9f) else TextDark.copy(alpha = 0.8f),
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1
-                        )
-                    }
-                } else {
-                    Spacer(modifier = Modifier.width(1.dp))
-                }
-
-                // Status Pill Badge
-                val pillText = when (statusLower) {
-                    "available" -> "Available"
-                    "occupied" -> "Occupied"
-                    "reserved" -> "Reserved"
-                    "order-placed" -> "Placed"
-                    "ready" -> "Ready"
-                    "free" -> "Free"
-                    "served" -> "Served"
-                    else -> table.status.uppercase()
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = when (statusLower) {
-                        "available" -> PinkLightBg
-                        "free" -> Color.White
-                        else -> Color.White.copy(alpha = 0.9f)
-                    },
-                    modifier = Modifier.clickable(enabled = statusLower == "free" || statusLower == "reserved") {
-                        onFreeClick?.invoke()
-                    }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (statusLower == "free") {
-                            Icon(
-                                imageVector = Icons.Default.ReceiptLong,
-                                contentDescription = null,
-                                modifier = Modifier.size(9.dp),
-                                tint = PinkPrimary
-                            )
-                            Spacer(modifier = Modifier.width(2.dp))
-                        }
-                        Text(
-                            text = pillText,
-                            fontSize = 8.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (statusLower == "available") PinkPrimary else TextDark
-                        )
-                    }
-                }
-            }
-
-            // 2. CENTER: Clean, Bold Table Name (No overlapping duplicate texts)
-            Box(
+            // ================= LEFT SECTION (Time & Large Table Number with +) =================
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(vertical = 6.dp, horizontal = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = table.tableNumber,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = titleColor,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            // 3. BOTTOM ROW: Status Hint / Guest Count
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (statusLower in listOf("occupied", "order-placed", "served")) {
+                // Top: Occupied Time (or Status label)
+                if (!displayTime.isNullOrBlank()) {
                     Text(
-                        text = "+ Add Item",
-                        fontSize = 9.sp,
+                        text = displayTime,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (isDarkBackground) Color.White.copy(alpha = 0.9f) else PinkPrimary
+                        color = Color.White,
+                        letterSpacing = 0.5.sp
                     )
                 } else {
-                    Spacer(modifier = Modifier.width(1.dp))
+                    Text(
+                        text = if (isAvailable) "Available" else table.status.uppercase(),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isAvailable) PinkPrimary else Color.White.copy(alpha = 0.9f)
+                    )
                 }
 
-                if (table.guestsCount != null && table.guestsCount > 0) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "Guests",
-                            modifier = Modifier.size(11.dp),
-                            tint = if (isDarkBackground) Color.White else TextDark.copy(alpha = 0.75f)
-                        )
+                // Center: Big Table Number with centered '+' (e.g. T1 instead of Table 1)
+                val shortTableNumber = table.tableNumber
+                    .replace(Regex("(?i)table\\s*[-_]?"), "T")
+                    .trim()
+
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = shortTableNumber,
+                        fontSize = if (shortTableNumber.length > 3) 28.sp else 34.sp,
+                        fontWeight = FontWeight.Black,
+                        color = tableTextColor,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+
+                    if (isOccupiedOrActive) {
                         Text(
-                            text = table.guestsCount.toString(),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isDarkBackground) Color.White else TextDark
+                            text = "+",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White.copy(alpha = 0.95f),
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
+            }
+
+            // ================= VERTICAL DIVIDER LINE =================
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(Color(0x33B392C9))
+            )
+
+            // ================= RIGHT SECTION (Person Icon & Guest Count) =================
+            Column(
+                modifier = Modifier
+                    .width(52.dp)
+                    .fillMaxHeight()
+                    .padding(vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = "Guests",
+                    tint = if (isAvailable) PinkPrimary.copy(alpha = 0.6f) else Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                val guests = if (table.guestsCount != null && table.guestsCount > 0) {
+                    table.guestsCount.toString()
+                } else if (isAvailable) {
+                    "0"
+                } else {
+                    "2"
+                }
+
+                Text(
+                    text = guests,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = if (isAvailable) PinkPrimary.copy(alpha = 0.8f) else Color.White
+                )
             }
         }
     }
 }
 
-private fun String?.isNull_or_blank(): Boolean = this == null || this.trim().isEmpty()
-
+/**
+ * Format "2026-08-25 12:39:59" or "12:39:59" to clean "12:39"
+ */
+private fun formatDisplayTime(raw: String?): String? {
+    if (raw.isNullOrBlank()) return null
+    return try {
+        val trimmed = raw.trim()
+        val timePart = if (trimmed.contains(" ")) {
+            trimmed.split(" ")[1]
+        } else {
+            trimmed
+        }
+        val segments = timePart.split(":")
+        if (segments.size >= 2) {
+            "${segments[0]}:${segments[1]}"
+        } else {
+            timePart
+        }
+    } catch (e: Exception) {
+        raw
+    }
+}

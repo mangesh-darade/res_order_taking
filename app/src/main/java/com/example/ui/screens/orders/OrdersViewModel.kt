@@ -28,6 +28,9 @@ class OrdersViewModel(
     val uiState: StateFlow<OrdersUiState> = _uiState.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            repository.fetchBranding()
+        }
         loadTablesList()
     }
 

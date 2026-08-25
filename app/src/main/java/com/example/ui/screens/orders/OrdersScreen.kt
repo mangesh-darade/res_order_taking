@@ -38,6 +38,7 @@ import com.example.ui.components.MainTab
 import com.example.ui.components.SharedTabStrip
 import com.example.ui.components.TopHeaderBar
 import com.example.ui.theme.*
+import com.example.util.CurrencyConfig
 
 @Composable
 fun OrdersScreen(
@@ -298,7 +299,7 @@ fun OrdersScreen(
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "Total: $${String.format("%.2f", order.grandTotal)}",
+                                text = "Total: ${CurrencyConfig.format(order.grandTotal)}",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = PinkPrimary
@@ -636,7 +637,7 @@ fun OrderItemCard(
                             color = TextDark
                         )
                         Text(
-                            text = "$${String.format("%.2f", item.price)}",
+                            text = CurrencyConfig.format(item.price),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = PinkPrimary

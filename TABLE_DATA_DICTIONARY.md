@@ -1,7 +1,5 @@
 # 📊 Restaurant Order Taking — Database Tables & Sample Data
 
-This document provides a clean, simple, and easy-to-understand breakdown of every database table and the exact real-world data stored inside it.
-
 ---
 
 ## 📑 Table Index
