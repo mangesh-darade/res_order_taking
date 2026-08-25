@@ -1,224 +1,243 @@
-# 🍽️ Restaurant Order Taking — Database Architecture & Schema Documentation
+# 🍽️ Restaurant Order Taking — Database Tables & Real-World Data Examples
 
-या डॉक्युमेंटमध्ये **Restaurant Order Taking System (`res_order_taking` + `ElintOm_PHP_8.5`)** साठी वापरल्या जाणाऱ्या सर्व MySQL डेटाबेस टेबल्स, त्यांचे कॉलम्स, डेटा टाईप्स, संबंध (Relationships) आणि ॲप फ्लो मधील वापर सविस्तर दिलेला आहे.
-
----
-
-## 📊 1. Entity-Relationship (ER) Architecture Diagram
-
-```mermaid
-erDiagram
-    sma_res_sections ||--o{ sma_res_subsections : "has many"
-    sma_res_sections ||--o{ sma_res_tables : "contains"
-    sma_res_subsections ||--o{ sma_res_tables : "contains"
-    sma_res_table_status ||--o{ sma_res_tables : "defines status"
-    
-    sma_res_tables ||--o{ sma_res_orders : "has active"
-    sma_res_orders ||--o{ sma_res_orders_guests : "has guests"
-    sma_res_orders ||--o{ sma_res_orders_items : "contains items"
-    sma_res_orders_guests ||--o{ sma_res_orders_items : "assigned to"
-
-    sma_categories ||--o{ sma_products : "categorizes"
-    sma_products ||--o| sma_res_product_details : "restaurant config"
-    sma_products ||--o{ sma_res_orders_items : "ordered item"
-
-    sma_res_meal_type ||--o{ sma_res_product_details : "defines meal type"
-    sma_res_meal_type ||--o{ sma_res_orders_items : "selected meal type"
-    sma_res_meat_wellness ||--o{ sma_res_orders_items : "selected wellness"
-
-    sma_res_orders ||--o| sma_sales : "finalizes to POS Sale"
-    sma_sales ||--o{ sma_sale_items : "pos bill items"
-```
+हे डॉक्युमेंट समजण्यासाठी अत्यंत सोप्या भाषेत **प्रत्येक टेबलचे काम काय आहे** आणि **त्या टेबलमध्ये प्रत्यक्षात कसला डेटा (Sample Real-World Rows)** सेव्ह होतो, हे उदाहरणांसहित दाखवते.
 
 ---
 
-## 📋 2. Comprehensive Tables List & Descriptions
+## 📑 Quick Table Index (सर्व टेबल्सची यादी)
 
-### 🏗️ A. Table & Dining Floor Management (टेबल आणि फ्लोअर व्यवस्थापन)
-
-#### 1. `sma_res_sections` (रेस्टॉरंट सेक्शन्स / फ्लोअर्स)
-* **उद्देश:** रेस्टॉरंटचे प्रमुख विभाग (उदा. Main AC Hall, Garden, Rooftop, Family Section).
-| Column Name | Data Type | Key | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `INT(11)` | PK, AI | युनिक सेक्शन आयडी |
-| `name` | `VARCHAR(100)` | | विभागाचे नाव (उदा. "Main Dining", "Garden Area") |
-| `is_active` | `TINYINT(1)` | | 1 = Active, 0 = Inactive |
-| `created_at` | `DATETIME` | | तयार केल्याची तारीख व वेळ |
-| `updated_at` | `DATETIME` | | अपडेट वेळ |
-
-#### 2. `sma_res_subsections` (सब-सेक्शन्स / रूम्स / झोन्स)
-* **उद्देश:** सेक्शन अंतर्गत असलेले उपविभाग (उदा. AC Hall मधील "Hall A", "Hall B", "VIP Lounge").
-| Column Name | Data Type | Key | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `INT(11)` | PK, AI | युनिक सब-सेक्शन आयडी |
-| `section_id` | `INT(11)` | FK | मुख्य सेक्शनचा reference (`sma_res_sections.id`) |
-| `name` | `VARCHAR(100)` | | सब-सेक्शन नाव (उदा. "Hall A", "Balcony") |
-| `is_active` | `TINYINT(1)` | | 1 = Active, 0 = Inactive |
-
-#### 3. `sma_res_tables` (डायनिंग टेबल्स)
-* **उद्देश:** रेस्टॉरंटमधील सर्व प्रत्यक्ष टेबल्सची यादी आणि त्यांची चालू स्थिती.
-| Column Name | Data Type | Key | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `INT(11)` | PK, AI | युनिक टेबल आयडी |
-| `name` | `VARCHAR(50)` | | टेबल नंबर / नाव (उदा. "Table 1", "T-05") |
-| `section_id` | `INT(11)` | FK | सेक्शन आयडी |
-| `subsection_id` | `INT(11)` | FK | सब-सेक्शन आयडी |
-| `status_id` | `INT(11)` | FK | टेबल स्थिती आयडी (`sma_res_table_status.id`) |
-| `guests_count` | `INT(11)` | | टेबलची क्षमता / चालू बसलेले गेस्ट्स |
-| `reserved_by` | `VARCHAR(100)`| | कोणासाठी रिझर्व्ह केले आहे त्याचे नाव |
-| `reserved_until` | `DATETIME` | | किती वेळेपर्यंत रिझर्व्ह आहे |
-| `reserved_note` | `TEXT` | | रिझर्व्हेशन संदर्भात टीप |
-| `is_active` | `TINYINT(1)` | | 1 = Active, 0 = Inactive |
-
-#### 4. `sma_res_table_status` (टेबल स्टेटस मास्टर)
-* **उद्देश:** टेबलची स्थिती व कलर कोडिंग (Available, Occupied, Order Placed, Ready, Reserved).
-| Column Name | Data Type | Key | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `INT(11)` | PK, AI | स्टेटस आयडी (उदा. 1=Available, 2=Occupied, 3=Reserved) |
-| `value` | `VARCHAR(50)` | | स्थितीचे नाव ("Available", "Occupied", "Order Placed", "Ready", "Served", "Reserved") |
-| `color` | `VARCHAR(20)` | | UI वरील HEX Color कोड (उदा. `#2E7D32`, `#C2185B`, `#E65100`) |
+1. [🍽️ 1. `sma_res_sections` (रेस्टॉरंट सेक्शन्स / मजले / भाग)](#1-sma_res_sections)
+2. [🚪 2. `sma_res_subsections` (उपविभाग / हॉल्स / केबिन्स)](#2-sma_res_subsections)
+3. [🪑 3. `sma_res_tables` (डायनिंग टेबल्स)](#3-sma_res_tables)
+4. [🚦 4. `sma_res_table_status` (टेबल स्थिती मास्टर)](#4-sma_res_table_status)
+5. [🧾 5. `sma_res_orders` (चालू टेबल ऑर्डर्स)](#5-sma_res_orders)
+6. [👥 6. `sma_res_orders_guests` (टेबलवरील गेस्ट्स)](#6-sma_res_orders_guests)
+7. [🍲 7. `sma_res_orders_items` (ऑर्डर मधील मागवलेले आयटम्स)](#7-sma_res_orders_items)
+8. [📂 8. `sma_categories` (मेन्यू कॅटेगरीज)](#8-sma_categories)
+9. [🍕 9. `sma_products` (प्रॉडक्ट्स / डिशेस)](#9-sma_products)
+10. [💰 10. `sma_res_product_details` (डायनिंग प्राईस व मील टाईप)](#10-sma_res_product_details)
+11. [🥗 11. `sma_res_meal_type` (व्हेज / नॉन-व्हेज मास्टर)](#11-sma_res_meal_type)
+12. [🥩 12. `sma_res_meat_wellness` (कुकिंग वेलनेस लेव्हल)](#12-sma_res_meat_wellness)
+13. [⚠️ 13. `sma_res_common_allergies` (ॲलर्जी मास्टर)](#13-sma_res_common_allergies)
+14. [🧀 14. `sma_res_add_ons` & `sma_res_toppings` (एक्स्ट्रा ॲड-ऑन्स आणि टॉपिंग्स)](#14-sma_res_add_ons--sma_res_toppings)
+15. [💳 15. `sma_sales` & `sma_sale_items` (फायनल POS बिलिंग)](#15-sma_sales--sma_sale_items)
 
 ---
 
-### 📝 B. Order & Multi-Guest Management (ऑर्डर आणि गेस्ट व्यवस्थापन)
-
-#### 5. `sma_res_orders` (चालू टेबल ऑर्डर्स)
-* **उद्देश:** कोणत्याही टेबलवर चालू असलेल्या रनिंग ऑर्डरचा मुख्य रेकॉर्ड.
-| Column Name | Data Type | Key | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `INT(11)` | PK, AI | युनिक ऑर्डर आयडी (उदा. `101`) |
-| `res_tables_id` | `INT(11)` | FK | ज्या टेबलवर ऑर्डर चालू आहे त्याचा आयडी (`sma_res_tables.id`) |
-| `guest_count` | `INT(11)` | | टेबलवर बसलेल्या एकूण गेस्ट्सची संख्या (उदा. 2, 4, 6) |
-| `status` | `VARCHAR(30)` | | `Active`, `Order Placed`, `Ready`, `Served`, `Completed`, `Cancelled` |
-| `payment_status`| `VARCHAR(30)` | | `Pending`, `Paid`, `Partial` |
-| `sgst_percent` | `DECIMAL(5,2)`| | SGST टॅक्स टक्केवारी (उदा. 2.50%) |
-| `cgst_percent` | `DECIMAL(5,2)`| | CGST टॅक्स टक्केवारी (उदा. 2.50%) |
-| `created_at` | `DATETIME` | | ऑर्डर सुरू केल्याची तारीख व वेळ |
-| `updated_at` | `DATETIME` | | शेवटची अपडेट वेळ |
-
-#### 6. `sma_res_orders_guests` (ऑर्डर मधील गेस्ट्सची यादी)
-* **उद्देश:** एकाच टेबलवरील प्रत्येक स्वतंत्र गेस्ट (Guest 1, Guest 2, Guest 3) चा ट्रॅकिंग रेकॉर्ड.
-| Column Name | Data Type | Key | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `INT(11)` | PK, AI | युनिक गेस्ट रो आयडी |
-| `res_orders_id` | `INT(11)` | FK | मुख्य ऑर्डरचा reference (`sma_res_orders.id`) |
-| `created_at` | `DATETIME` | | गेस्ट जोडल्याची तारीख व वेळ |
-
-#### 7. `sma_res_orders_items` (ऑर्डर मधील आयटम्स आणि कस्टमायझेशन)
-* **उद्देश:** प्रत्येक गेस्टने किंवा सर्व गेस्ट्सने (Table Common) मागवलेले पदार्थ, प्रमाण आणि कुकिंग सूचना.
-| Column Name | Data Type | Key | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `INT(11)` | PK, AI | युनिक ऑर्डर आयटम आयडी |
-| `res_orders_id` | `INT(11)` | FK | मुख्य ऑर्डर आयडी (`sma_res_orders.id`) |
-| `res_orders_guests_id`| `INT(11)` | FK | गेस्ट आयडी (`0` = Table Common / All Guests, किंवा `sma_res_orders_guests.id`) |
-| `sma_product_id` | `INT(11)` | FK | प्रॉडक्ट / डिश आयडी (`sma_products.id`) |
-| `quantity` | `DECIMAL(10,2)`| | पदार्थांची संख्या (Quantity) |
-| `unit_price` | `DECIMAL(15,2)`| | प्रति नग मूळ दर |
-| `amount` | `DECIMAL(15,2)`| | एकूण रक्कम (`(unit_price + add_ons) * quantity`) |
-| `meal_type_id` | `INT(11)` | FK | व्हेज (1) / नॉन-व्हेज (2) आयडी |
-| `sma_res_meat_wellness_id`| `INT(11)` | FK | Rare / Medium / Well Done आयडी |
-| `spice_level` | `VARCHAR(30)` | | तिखटपणाची पातळी (`Mild`, `Medium`, `Spicy`, `Extra Hot`) |
-| `allergies` | `TEXT` | | ॲलर्जीची नावे (उदा. "Peanut, Gluten") |
-| `add_ons` | `TEXT` | | निवडलेले ॲड-ऑन्स आयडी किंवा नावे (उदा. "Extra Cheese") |
-| `toppings` | `TEXT` | | निवडलेले टॉपिंग्स (उदा. "Mushroom, Olives") |
-| `onion_flag` | `TINYINT(1)` | | 1 = No Onion (कांदा नाही), 0 = Normal |
-| `garlic_flag` | `TINYINT(1)` | | 1 = No Garlic (लसूण नाही), 0 = Normal |
-| `special_instructions`| `TEXT` | | शेफसाठी विशेष सूचना (उदा. "Less oil, make crispy") |
-| `status` | `VARCHAR(30)` | | आयटम स्थिती (`pending`, `kot`, `preparing`, `ready`, `served`) |
-| `created_at` | `DATETIME` | | ॲड केल्याची वेळ |
+## 🔍 Detailed Tables with Real-World Example Data
 
 ---
 
-### 🍔 C. Menu Catalog & Product Configuration (मेन्यू कॅटलॉग आणि प्रॉडक्ट कॉन्फिगरेशन)
+### <a id="1-sma_res_sections"></a>1. `sma_res_sections`
+* **काय काम करते:** हॉटेलमधील प्रमुख डायनिंग झोन्स किंवा एरियाज ठरवते.
+* **टेबलमधील प्रत्यक्ष डेटाचे उदाहरण (Sample Data):**
 
-#### 8. `sma_categories` (मेन्यू कॅटेगरीज)
-* **उद्देश:** मेन्यू वर्गीकरण (उदा. Starters, Main Course, Breads, Drinks, Desserts).
-| Column Name | Data Type | Key | Description |
+| id | name | is_active | created_at |
 | :--- | :--- | :--- | :--- |
-| `id` | `INT(11)` | PK, AI | कॅटेगरी आयडी |
-| `name` | `VARCHAR(100)` | | कॅटेगरी नाव (उदा. "Chinese Starters", "Beverages") |
-| `image` | `VARCHAR(255)` | | कॅटेगरी आयकॉन / इमेज पाथ |
-
-#### 9. `sma_products` (प्रॉडक्ट्स / डिशेस मास्टर)
-* **उद्देश:** रेस्टॉरंटमधील सर्व खाद्यपदार्थ आणि पेयांची मूळ यादी.
-| Column Name | Data Type | Key | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `INT(11)` | PK, AI | प्रॉडक्ट आयडी |
-| `code` | `VARCHAR(50)` | | प्रॉडक्ट आयटम कोड (उदा. "P101", "BUR01") |
-| `name` | `VARCHAR(255)` | | पदार्थाचे नाव (उदा. "Paneer Tikka", "Butter Chicken") |
-| `category_id` | `INT(11)` | FK | कॅटेगरी आयडी (`sma_categories.id`) |
-| `price` | `DECIMAL(15,2)`| | मूळ बेस प्राईस |
-| `image` | `VARCHAR(255)` | | पदार्थाचा फोटो / इमेज फाईल नाव |
-| `flag_visible` | `TINYINT(1)` | | 1 = POS व ॲपवर दिसेल, 0 = लपवलेला |
-
-#### 10. `sma_res_product_details` (रेस्टॉरंट-विशिष्ट प्रॉडक्ट सेटिंग्ज)
-* **उद्देश:** एखाद्या प्रॉडक्टचा रेस्टॉरंट डायनिंग दर आणि Meal Type मॅपिंग.
-| Column Name | Data Type | Key | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `INT(11)` | PK, AI | आयडी |
-| `product_id` | `INT(11)` | FK | प्रॉडक्ट आयडी (`sma_products.id`) |
-| `meal_type_id` | `INT(11)` | FK | Meal Type आयडी (1=Veg, 2=Non-Veg, 3=Egg, etc.) |
-| `price` | `DECIMAL(15,2)`| | रेस्टॉरंट डायनिंग प्राईस (Override Base Price) |
-| `is_active` | `TINYINT(1)` | | 1 = Active, 0 = Inactive |
+| **1** | Main AC Dining | 1 | 2026-01-10 10:00:00 |
+| **2** | Garden / Lawn Area | 1 | 2026-01-10 10:00:00 |
+| **3** | Rooftop Lounge | 1 | 2026-01-10 10:00:00 |
+| **4** | Family Banquet | 1 | 2026-01-10 10:00:00 |
 
 ---
 
-### 🌶️ D. Customization & Dietary Masters (कस्टमायझेशन आणि डाएट मास्टर्स)
+### <a id="2-sma_res_subsections"></a>2. `sma_res_subsections`
+* **काय काम करते:** एका सेक्शनमधील छोट्या रूम्स, हॉल्स किंवा सब-झोन्स मॅनेज करते.
+* **टेबलमधील प्रत्यक्ष डेटाचे उदाहरण (Sample Data):**
 
-#### 11. `sma_res_meal_type` (मील टाईप मास्टर)
-* **उद्देश:** व्हेज, नॉन-व्हेज, एग्गेटेरियन वर्गीकरण.
-| Column Name | Data Type | Key | Description |
+| id | section_id | name | is_active |
 | :--- | :--- | :--- | :--- |
-| `id` | `INT(11)` | PK, AI | 1 = Veg, 2 = Non-Veg, 3 = Egg |
-| `name` | `VARCHAR(50)` | | "Veg", "Non-Veg", "Egg" |
-| `is_active` | `TINYINT(1)` | | 1 = Active |
-
-#### 12. `sma_res_meat_wellness` (नॉन-व्हेज कुकिंग वेलनेस)
-* **उद्देश:** मटण/चिकन/बीफ स्टेक साठी वेलनेस लेव्हल (Rare, Medium, Well Done).
-| Column Name | Data Type | Key | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `INT(11)` | PK, AI | आयडी |
-| `type` | `VARCHAR(50)` | | "Rare", "Medium Rare", "Medium", "Well Done" |
-| `is_active` | `TINYINT(1)` | | 1 = Active |
-
-#### 13. `sma_res_common_allergies` (ॲलर्जी मास्टर)
-* **उद्देश:** ग्राहकांच्या ॲलर्जी सूचना (Peanut, Gluten, Dairy, Soy, Shellfish).
-| Column Name | Data Type | Key | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `INT(11)` | PK, AI | ॲलर्जी आयडी |
-| `name` | `VARCHAR(100)` | | ॲलर्जीचे नाव (उदा. "Peanuts", "Gluten Free", "Lactose") |
-| `is_active` | `TINYINT(1)` | | 1 = Active |
-
-#### 14. `sma_res_add_ons` & `sma_res_toppings` (ॲड-ऑन्स आणि टॉपिंग्स)
-* **उद्देश:** पदार्थासोबत मिळणारे एक्स्ट्रा ॲड-ऑन्स (उदा. Extra Cheese, Mayo Dip) आणि टॉपिंग्स (Mushroom, Olives).
-| Column Name | Data Type | Key | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `INT(11)` | PK, AI | आयडी |
-| `name` | `VARCHAR(100)` | | ॲड-ऑन/टॉपिंगचे नाव (उदा. "Extra Cheese", "Jalapenos") |
-| `price` | `DECIMAL(10,2)`| | अतिरिक्त शुल्क (उदा. 20.00, 30.00) |
-| `is_active` | `TINYINT(1)` | | 1 = Active |
+| **101** | 1 (Main AC) | Hall A | 1 |
+| **102** | 1 (Main AC) | VIP Family Room | 1 |
+| **103** | 2 (Garden) | Poolside Garden | 1 |
+| **104** | 3 (Rooftop) | Sunset Deck | 1 |
 
 ---
 
-### 💳 E. POS Sales & KDS Engine (बिलिंग आणि किचन डिस्प्ले)
+### <a id="3-sma_res_tables"></a>3. `sma_res_tables`
+* **काय काम करते:** प्रत्येक प्रत्यक्ष टेबल, त्याची आसन क्षमता (capacity) आणि चालू स्थिती साठवते.
+* **टेबलमधील प्रत्यक्ष डेटाचे उदाहरण (Sample Data):**
 
-#### 15. `sma_sales` & `sma_sale_items` (अधिकृत POS विक्री रेकॉर्ड)
-* **उद्देश:** जेव्हा Captain **Finalize Order** करतो, तेव्हा या टेबलमध्ये अंतिम कर, सूट आणि बिलाची नोंद होऊन POS Sale ID तयार होतो.
-* **वापर:** इन्व्हॉइस रिसिप्ट (80mm Thermal Receipt), GST टॅक्स रिपोर्टिंग आणि अकाऊंटिंग.
-
-#### 16. `sma_suspended_bills` & `sma_suspended_items` (KDS / किचन डिस्प्ले सिस्टीम)
-* **उद्देश:** जेव्हा Captain **KOT** फायर करतो, तेव्हा हे टेबल्स किचन डिस्प्ले (Kitchen Screen / Chef Tablet) वर आयटम्स आणि शेफ नोट्स पाठवण्यासाठी वापरले जातात.
+| id | name | section_id | subsection_id | status_id | guests_count | reserved_by |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **1** | Table 1 | 1 | 101 | **2** (Occupied) | 4 | *NULL* |
+| **2** | Table 2 | 1 | 101 | **1** (Available)| 2 | *NULL* |
+| **3** | Table 3 | 1 | 102 | **7** (Order Placed)| 6 | *NULL* |
+| **4** | Table 4 | 2 | 103 | **3** (Reserved) | 4 | Rajesh Sharma |
 
 ---
 
-## 🔄 3. Android Screen ➡️ Database Table Mapping Flow
+### <a id="4-sma_res_table_status"></a>4. `sma_res_table_status`
+* **काय काम करते:** ॲपवर टेबलचा रंग आणि स्थिती (Badge) दाखवण्यासाठी मास्टर डेटा.
+* **टेबलमधील प्रत्यक्ष डेटाचे उदाहरण (Sample Data):**
 
-```
-1️⃣ Sections Screen  ➡️ SELECT FROM `sma_res_sections`, `sma_res_subsections`
-2️⃣ Tables Screen    ➡️ SELECT FROM `sma_res_tables`, `sma_res_table_status`, `sma_res_orders`
-3️⃣ Menu Screen      ➡️ SELECT FROM `sma_categories`, `sma_products`, `sma_res_product_details`, `sma_res_meal_type`
-4️⃣ Customization    ➡️ SELECT FROM `sma_res_add_ons`, `sma_res_toppings`, `sma_res_common_allergies`, `sma_res_meat_wellness`
-5️⃣ Add to Cart      ➡️ INSERT / UPDATE `sma_res_orders_items`, `sma_res_orders_guests`
-6️⃣ Fire KOT         ➡️ UPDATE `sma_res_orders_items` (status='kot') + INSERT `sma_suspended_bills`
-7️⃣ Finalize Bill    ➡️ INSERT `sma_sales`, `sma_sale_items` + UPDATE `sma_res_tables` (status_id=1 Available)
-```
+| id | value (स्थिती) | color (HEX Code) | अर्थ |
+| :--- | :--- | :--- | :--- |
+| **1** | Available | `#2E7D32` (हिरवा 🟢) | टेबल मोकळे आहे |
+| **2** | Occupied | `#C2185B` (गुलाबी/लाल 🔴) | गेस्ट बसले आहेत |
+| **3** | Reserved | `#7B1FA2` (जांभळा 🟣) | टेबल बुक केलेले आहे |
+| **4** | Ready | `#0288D1` (निळा 🔵) | अन्न तयार झाले आहे |
+| **7** | Order Placed | `#E65100` (केशरी 🟡) | KOT किचनमध्ये गेलेली आहे |
+
+---
+
+### <a id="5-sma_res_orders"></a>5. `sma_res_orders`
+* **काय काम करते:** जेव्हा Captain टेबलवर ऑर्डर सुरू करतो, तेव्हा या टेबलमध्ये मुख्य रनिंग ऑर्डर तयार होते.
+* **टेबलमधील प्रत्यक्ष डेटाचे उदाहरण (Sample Data):**
+
+| id | res_tables_id | guest_count | status | payment_status | sgst_percent | cgst_percent | created_at |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **501** | 1 (Table 1) | 3 | `Active` | `Pending` | 2.50 | 2.50 | 2026-08-25 19:30:00 |
+| **502** | 3 (Table 3) | 6 | `Order Placed` | `Pending` | 2.50 | 2.50 | 2026-08-25 19:15:00 |
+
+---
+
+### <a id="6-sma_res_orders_guests"></a>6. `sma_res_orders_guests`
+* **काय काम करते:** एकाच टेबलवर बसलेल्या स्वतंत्र व्यक्तींना (Guest 1, Guest 2, Guest 3) ट्रॅक करते.
+* **टेबलमधील प्रत्यक्ष डेटाचे उदाहरण (Sample Data):**
+
+| id (Guest Row) | res_orders_id | created_at |
+| :--- | :--- | :--- |
+| **1** | 501 (Table 1 Order) | 2026-08-25 19:30:00 |
+| **2** | 501 (Table 1 Order) | 2026-08-25 19:30:00 |
+| **3** | 501 (Table 1 Order) | 2026-08-25 19:30:00 |
+
+---
+
+### <a id="7-sma_res_orders_items"></a>7. `sma_res_orders_items`
+* **काय काम करते:** प्रत्येक गेस्टने किंवा संपूर्ण टेबलने (Common) काय मागवले, किती प्रमाणात मागवले, तिखट किती हवे आणि काय ॲड केले.
+* **टेबलमधील प्रत्यक्ष डेटाचे उदाहरण (Sample Data):**
+
+| id | res_orders_id | res_orders_guests_id | sma_product_id | qty | unit_price | amount | spice_level | add_ons / notes | status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **1001** | 501 | **0 (Table Common)** | 20 (Mineral Water) | 2 | 20.00 | 40.00 | *NULL* | Chilled water bottle | `kot` |
+| **1002** | 501 | **1 (Guest 1)** | 45 (Paneer Tikka) | 1 | 240.00 | 270.00 | `Medium` | Extra Cheese (30.00), No Onion | `kot` |
+| **1003** | 501 | **2 (Guest 2)** | 88 (Butter Chicken)| 1 | 320.00 | 320.00 | `Spicy` | Less oil, Well Done | `kot` |
+| **1004** | 501 | **0 (Table Common)** | 12 (Butter Naan) | 4 | 40.00 | 160.00 | *NULL* | Crispy hot | `pending`|
+
+---
+
+### <a id="8-sma_categories"></a>8. `sma_categories`
+* **काय काम करते:** मेन्यूमधील कॅटेगरी वर्गीकरण (Starters, Main Course, Breads इ.).
+* **टेबलमधील प्रत्यक्ष डेटाचे उदाहरण (Sample Data):**
+
+| id | name | image |
+| :--- | :--- | :--- |
+| **1** | Starters & Appetizers | `starters.png` |
+| **2** | Main Course (Veg) | `veg_main.png` |
+| **3** | Main Course (Non-Veg) | `nonveg_main.png` |
+| **4** | Tandoor & Breads | `breads.png` |
+| **5** | Beverages & Drinks | `drinks.png` |
+
+---
+
+### <a id="9-sma_products"></a>9. `sma_products`
+* **काय काम करते:** किचनमधील सर्व खाद्यपदार्थांची मूळ यादी (Master Catalog).
+* **टेबलमधील प्रत्यक्ष डेटाचे उदाहरण (Sample Data):**
+
+| id | code | name | category_id | price | flag_visible |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **12** | BREAD01 | Butter Naan | 4 (Breads) | 40.00 | 1 |
+| **20** | BEV01 | Mineral Water 1L | 5 (Beverages)| 20.00 | 1 |
+| **45** | STAR05 | Paneer Tikka Dry | 1 (Starters) | 240.00 | 1 |
+| **88** | NVEG02 | Butter Chicken Masala| 3 (Non-Veg) | 320.00 | 1 |
+
+---
+
+### <a id="10-sma_res_product_details"></a>10. `sma_res_product_details`
+* **काय काम करते:** एखाद्या प्रॉडक्टची रेस्टॉरंटमधील डायनिंग प्राईस आणि तो व्हेज आहे की नॉन-व्हेज हे ठरवते.
+* **टेबलमधील प्रत्यक्ष डेटाचे उदाहरण (Sample Data):**
+
+| id | product_id | meal_type_id | price (Dining Rate) | is_active |
+| :--- | :--- | :--- | :--- | :--- |
+| **1** | 45 (Paneer Tikka) | **1 (Veg)** | 240.00 | 1 |
+| **2** | 88 (Butter Chicken) | **2 (Non-Veg)** | 320.00 | 1 |
+| **3** | 12 (Butter Naan) | **1 (Veg)** | 40.00 | 1 |
+
+---
+
+### <a id="11-sma_res_meal_type"></a>11. `sma_res_meal_type`
+* **काय काम करते:** मेन्यू स्क्रीनवर **Veg** (हिरवा चौकोन 🟢) आणि **Non-Veg** (लाल त्रिकोण 🔺) फिल्टर करण्यासाठी.
+* **टेबलमधील प्रत्यक्ष डेटाचे उदाहरण (Sample Data):**
+
+| id | name | अर्थ |
+| :--- | :--- | :--- |
+| **1** | Veg | शाकाहारी पदार्थ |
+| **2** | Non-Veg | मांसाहारी पदार्थ |
+| **3** | Egg | अंड्याचे पदार्थ (Eggitarian) |
+
+---
+
+### <a id="12-sma_res_meat_wellness"></a>12. `sma_res_meat_wellness`
+* **काय काम करते:** मटण/चिकन स्टेकसाठी ग्राहकाला कुकिंग वेलनेस निवडता यावी.
+* **टेबलमधील प्रत्यक्ष डेटाचे उदाहरण (Sample Data):**
+
+| id | type | अर्थ |
+| :--- | :--- | :--- |
+| **1** | Rare | किंचित भाजलेले / सॉफ्ट |
+| **2** | Medium Rare | मध्यम मऊ |
+| **3** | Medium | सर्वसामान्य शिजवलेले |
+| **4** | Well Done | पूर्णपणे आणि कडक भाजलेले |
+
+---
+
+### <a id="13-sma_res_common_allergies"></a>13. `sma_res_common_allergies`
+* **काय काम करते:** ग्राहकांना असलेल्या ॲलर्जीची माहिती शेफपर्यंत पोहोचवणे.
+* **टेबलमधील प्रत्यक्ष डेटाचे उदाहरण (Sample Data):**
+
+| id | name |
+| :--- | :--- |
+| **1** | Peanuts / शेंगदाणे |
+| **2** | Gluten Free / गहू-मैदा मुक्त |
+| **3** | Dairy / दुग्धजन्य पदार्थ |
+| **4** | Soy / सोयाबीन |
+| **5** | Shellfish / सी-फूड |
+
+---
+
+### <a id="14-sma_res_add_ons--sma_res_toppings"></a>14. `sma_res_add_ons` & `sma_res_toppings`
+* **काय काम करते:** पदार्थांसोबत एक्स्ट्रा चीज, डिप्स किंवा टॉपिंग्सचे दर ॲड करणे.
+* **टेबलमधील प्रत्यक्ष डेटाचे उदाहरण (Sample Data):**
+
+#### `sma_res_add_ons`:
+| id | name | price (अतिरिक्त दर) |
+| :--- | :--- | :--- |
+| **1** | Extra Cheese | ₹ 30.00 |
+| **2** | Extra Mayo Dip | ₹ 20.00 |
+| **3** | Mint Chutney Jar | ₹ 15.00 |
+
+#### `sma_res_toppings`:
+| id | name | price (अतिरिक्त दर) |
+| :--- | :--- | :--- |
+| **1** | Fresh Mushroom | ₹ 25.00 |
+| **2** | Black Olives | ₹ 20.00 |
+| **3** | Jalapenos | ₹ 20.00 |
+
+---
+
+### <a id="15-sma_sales--sma_sale_items"></a>15. `sma_sales` & `sma_sale_items` (POS Final Billing)
+* **काय काम करते:** जेव्हा Captain **"Finalize Order"** बटण दाबतो, तेव्हा टेबलच्या चालू ऑर्डरचे अधिकृत बिलामध्ये रूपांतर होते.
+* **टेबलमधील प्रत्यक्ष डेटाचे उदाहरण (Sample Data):**
+
+#### `sma_sales` (मुख्य बिल):
+| id | reference_no | total (Subtotal) | total_tax (GST) | grand_total | sale_status | payment_status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **9801** | `SALE/2026/08/012`| ₹ 790.00 | ₹ 39.50 | **₹ 829.50** | `completed` | `paid` |
+
+#### `sma_sale_items` (बिलातील आयटम यादी):
+| id | sale_id | product_id | product_name | quantity | unit_price | subtotal |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **1** | 9801 | 45 | Paneer Tikka Dry | 1 | 270.00 | 270.00 |
+| **2** | 9801 | 88 | Butter Chicken Masala | 1 | 320.00 | 320.00 |
+| **3** | 9801 | 12 | Butter Naan | 4 | 40.00 | 160.00 |
+| **4** | 9801 | 20 | Mineral Water 1L | 2 | 20.00 | 40.00 |
+
+---
+
+## 🎯 Summary (थोडक्यात सारांश)
+
+1. **फ्लोअर आणि टेबल्स:** `sma_res_sections` ➡️ `sma_res_subsections` ➡️ `sma_res_tables` ➡️ `sma_res_table_status`
+2. **मेन्यू आणि दर:** `sma_categories` ➡️ `sma_products` ➡️ `sma_res_product_details`
+3. **कस्टमायझेशन:** `sma_res_meal_type` + `sma_res_add_ons` + `sma_res_toppings` + `sma_res_common_allergies`
+4. **ऑर्डर आणि गेस्ट्स:** `sma_res_orders` ➡️ `sma_res_orders_guests` ➡️ `sma_res_orders_items`
+5. **अंतिम बिल:** `sma_sales` ➡️ `sma_sale_items`
