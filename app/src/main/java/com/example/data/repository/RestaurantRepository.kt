@@ -27,31 +27,48 @@ class RestaurantRepository private constructor() {
     private val api: RestaurantApiService
         get() = ApiClient.service
 
-    // In-memory state for offline/fallback mode
-    private val _sections = MutableStateFlow(getInitialSections())
-    private val _subsections = MutableStateFlow(getInitialSubsections())
-    private val _tables = MutableStateFlow(getInitialTables())
-    private val _orders = MutableStateFlow(getInitialOrders())
-    private val _categories = MutableStateFlow(getInitialCategories())
-    private val _menuItems = MutableStateFlow(getInitialMenuItems())
-    private val _customizations = MutableStateFlow(getInitialCustomizations())
+    // In-memory state for live API data
+    private val _branding = MutableStateFlow(BrandingInfo())
+    private val _sections = MutableStateFlow<List<Section>>(emptyList())
+    private val _subsections = MutableStateFlow<List<Subsection>>(emptyList())
+    private val _tables = MutableStateFlow<List<TableItem>>(emptyList())
+    private val _orders = MutableStateFlow<List<OrderBootstrap>>(emptyList())
+    private val _categories = MutableStateFlow<List<MenuCategory>>(emptyList())
+    private val _menuItems = MutableStateFlow<List<MenuItem>>(emptyList())
+    private val _customizations = MutableStateFlow<Map<String, ProductCustomization>>(emptyMap())
 
+    val branding: StateFlow<BrandingInfo> = _branding.asStateFlow()
     val sections: StateFlow<List<Section>> = _sections.asStateFlow()
     val tables: StateFlow<List<TableItem>> = _tables.asStateFlow()
+
+    suspend fun fetchBranding(): Result<BrandingInfo> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.getBranding()
+            if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
+                val data = response.body()?.data ?: BrandingInfo()
+                _branding.value = data
+                com.example.util.CurrencyConfig.updateFromBranding(data)
+                return@withContext Result.success(data)
+            }
+        } catch (e: Exception) {
+            // fallback
+        }
+        com.example.util.CurrencyConfig.updateFromBranding(_branding.value)
+        Result.success(_branding.value)
+    }
 
     suspend fun fetchSections(): Result<List<Section>> = withContext(Dispatchers.IO) {
         try {
             val response = api.getSections()
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
                 val data = response.body()?.data ?: emptyList()
-                if (data.isNotEmpty()) _sections.value = data
-                Result.success(_sections.value)
-            } else {
-                Result.success(_sections.value)
+                _sections.value = data
+                return@withContext Result.success(data)
             }
         } catch (e: Exception) {
-            Result.success(_sections.value)
+            // Error
         }
+        Result.success(_sections.value)
     }
 
     suspend fun fetchSubsections(sectionId: String): Result<List<Subsection>> = withContext(Dispatchers.IO) {
@@ -59,13 +76,13 @@ class RestaurantRepository private constructor() {
             val response = api.getSubsections(sectionId)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
                 val data = response.body()?.data ?: emptyList()
-                Result.success(data.ifEmpty { _subsections.value.filter { it.sectionId == sectionId } })
-            } else {
-                Result.success(_subsections.value.filter { it.sectionId == sectionId })
+                _subsections.value = _subsections.value.filter { it.sectionId != sectionId } + data
+                return@withContext Result.success(data)
             }
         } catch (e: Exception) {
-            Result.success(_subsections.value.filter { it.sectionId == sectionId })
+            // Error
         }
+        Result.success(_subsections.value.filter { it.sectionId == sectionId })
     }
 
     suspend fun fetchTables(sectionId: String, subsectionId: String? = null): Result<List<TableItem>> = withContext(Dispatchers.IO) {
@@ -73,13 +90,11 @@ class RestaurantRepository private constructor() {
             val response = api.getTables(sectionId, subsectionId)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
                 val data = response.body()?.data ?: emptyList()
-                if (data.isNotEmpty()) {
-                    _tables.value = data
-                    return@withContext Result.success(data)
-                }
+                _tables.value = data
+                return@withContext Result.success(data)
             }
         } catch (e: Exception) {
-            // fallback
+            // Error
         }
         val filtered = _tables.value.filter {
             (it.sectionId == null || it.sectionId == sectionId) &&
@@ -183,10 +198,11 @@ class RestaurantRepository private constructor() {
             val response = api.getMenuCategories()
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
                 val data = response.body()?.data ?: emptyList()
-                if (data.isNotEmpty()) _categories.value = data
+                _categories.value = data
+                return@withContext Result.success(data)
             }
         } catch (e: Exception) {
-            // fallback
+            // Error
         }
         Result.success(_categories.value)
     }
@@ -196,10 +212,11 @@ class RestaurantRepository private constructor() {
             val response = api.getMenuItems(categoryId, mealType, search)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
                 val data = response.body()?.data ?: emptyList()
-                if (data.isNotEmpty()) return@withContext Result.success(data)
+                _menuItems.value = data
+                return@withContext Result.success(data)
             }
         } catch (e: Exception) {
-            // fallback
+            // Error
         }
         var list = _menuItems.value
         if (!categoryId.isNullOrBlank()) {
