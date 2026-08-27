@@ -41,6 +41,11 @@ fun TopHeaderBar(
         formatter.format(Date())
     }
 
+    val syncManager = remember { com.example.data.sync.SyncManager.getInstance(context) }
+    val isOnline by syncManager.isOnline.collectAsState()
+    val pendingCount by syncManager.pendingCountFlow.collectAsState(initial = 0)
+    val isSyncing by syncManager.isSyncing.collectAsState()
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -64,12 +69,20 @@ fun TopHeaderBar(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = currentUser?.role ?: "Captain",
-                        color = Color.White.copy(alpha = 0.85f),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = if (!isOnline) Color(0xFFFF9800) else if (pendingCount > 0) Color(0xFFFFC107) else Color(0xFF4CAF50),
+                            modifier = Modifier.size(7.dp)
+                        ) {}
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (!isOnline) "OFFLINE (${pendingCount})" else if (pendingCount > 0) "SYNCING (${pendingCount})" else (currentUser?.role ?: "Captain"),
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 } else {
                     Text(
                         text = todayDate,
@@ -82,14 +95,32 @@ fun TopHeaderBar(
             }
 
             // Center: App / Site brand title
-            Text(
-                text = (branding.siteName ?: "ELINTOM").uppercase(),
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.2.sp,
-                modifier = Modifier.testTag("app_brand_title")
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = (branding.siteName ?: "ELINTOM").uppercase(),
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.2.sp,
+                    modifier = Modifier.testTag("app_brand_title")
+                )
+                if (pendingCount > 0) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color.White.copy(alpha = 0.25f),
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    ) {
+                        Text(
+                            text = "⚡ $pendingCount",
+                            color = Color.Yellow,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
 
             // Right: Hamburger / Dropdown Menu
             Box {

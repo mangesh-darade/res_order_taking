@@ -18,7 +18,7 @@ data class OrdersUiState(
     val tableId: String? = null,
     val tablesList: List<TableItem> = emptyList(),
     val order: OrderBootstrap? = null,
-    val selectedGuestFilter: Int = 0, // 0 = All, 1..N = Guest 1..N
+    val selectedGuestFilter: Int = -1, // -1 = All, 0 = Table Items, 1..N = Guest 1..N
     val snackbarMessage: String? = null,
     val isFinalized: Boolean = false
 )
@@ -63,7 +63,7 @@ class OrdersViewModel(
     }
 
     fun setTableId(tableId: String?) {
-        _uiState.value = _uiState.value.copy(tableId = tableId, selectedGuestFilter = 0)
+        _uiState.value = _uiState.value.copy(tableId = tableId, selectedGuestFilter = -1)
         if (tableId != null) {
             loadOrderData(tableId, silent = false)
         }

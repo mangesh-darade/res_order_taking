@@ -16,6 +16,8 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     ApiSettingsManager.init(this)
+    com.example.data.sync.SyncManager.getInstance(this)
+    com.example.data.repository.RestaurantRepository.getInstance().initSyncManager(this)
     enableEdgeToEdge()
     setContent {
       MyApplicationTheme {

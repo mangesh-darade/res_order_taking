@@ -372,12 +372,12 @@ fun OrdersScreen(
                             .testTag("guest_chips_row")
                     ) {
                         item {
-                            val isSelected = uiState.selectedGuestFilter == 0
+                            val isSelected = uiState.selectedGuestFilter == -1
                             GuestChip(
                                 label = "All",
                                 isSelected = isSelected,
                                 isServed = false,
-                                onClick = { viewModel.selectGuestFilter(0) }
+                                onClick = { viewModel.selectGuestFilter(-1) }
                             )
                         }
 
@@ -398,7 +398,7 @@ fun OrdersScreen(
 
                     // Guest Accordion List (with All Guests / Table Common Card at top)
                     val filteredGuests = remember(order.guests, uiState.selectedGuestFilter) {
-                        if (uiState.selectedGuestFilter == 0) {
+                        if (uiState.selectedGuestFilter == -1) {
                             val commonGuest = order.guests.find { it.guestId == 0 } 
                                 ?: GuestOrder(guestId = 0, guestName = "Table Items (All Guests)", items = emptyList())
                             val individualGuests = order.guests.filter { it.guestId != 0 }

@@ -1,8 +1,10 @@
 package com.example.data.repository
 
+import android.content.Context
 import com.example.data.api.ApiClient
 import com.example.data.api.RestaurantApiService
 import com.example.data.model.*
+import com.example.data.sync.SyncManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +28,18 @@ class RestaurantRepository private constructor() {
 
     private val api: RestaurantApiService
         get() = ApiClient.service
+
+    private var syncManager: SyncManager? = null
+
+    fun initSyncManager(context: Context) {
+        if (syncManager == null) {
+            syncManager = SyncManager.getInstance(context)
+        }
+    }
+
+    suspend fun clearPendingSyncQueue() {
+        syncManager?.clearPendingQueue()
+    }
 
     // In-memory state for live API data
     private val _branding = MutableStateFlow(BrandingInfo())
@@ -115,14 +129,15 @@ class RestaurantRepository private constructor() {
         } catch (e: Exception) {
             // fallback
         }
-        // Fallback memory state lookup
+        // Fallback memory state lookup: only pick active (non-finalized) order for table
         var existingOrder = _orders.value.find { 
-            (orderId != null && it.orderId == orderId) || (tableId != null && it.tableId == tableId) 
+            (orderId != null && it.orderId == orderId) || 
+            (tableId != null && it.tableId == tableId && it.status != "finalized" && it.status != "completed") 
         }
 
         if (existingOrder == null && tableId != null) {
             val table = _tables.value.find { it.id == tableId }
-            val newOrderId = "ORD-$tableId"
+            val newOrderId = "ORD-$tableId-${System.currentTimeMillis() % 10000}"
             val section = _sections.value.find { it.id == table?.sectionId }
             val subsection = _subsections.value.find { it.id == table?.subsectionId }
             val initialGuestCount = maxOf(table?.guestsCount ?: 2, 2)
@@ -162,14 +177,32 @@ class RestaurantRepository private constructor() {
         } catch (e: Exception) {
             // fallback
         }
-        val order = fetchOrderBootstrap(tableId).getOrNull()!!
-        val updatedGuests = (1..guestCount).map { gId ->
-            order.guests.find { it.guestId == gId } ?: GuestOrder(guestId = gId, guestName = "Guest $gId")
+        // Always create a clean fresh order state for new table session
+        val table = _tables.value.find { it.id == tableId }
+        val newOrderId = "ORD-$tableId-${System.currentTimeMillis() % 10000}"
+        val section = _sections.value.find { it.id == table?.sectionId }
+        val subsection = _subsections.value.find { it.id == table?.subsectionId }
+        val initialGuests = (1..guestCount).map { gId ->
+            GuestOrder(guestId = gId, guestName = "Guest $gId", items = emptyList())
         }
-        val updated = order.copy(guestCount = guestCount, guests = updatedGuests)
-        val normalized = updateLocalOrder(updated)
+        val newOrder = OrderBootstrap(
+            orderId = newOrderId,
+            tableId = tableId,
+            tableNumber = table?.tableNumber ?: "T-$tableId",
+            sectionName = section?.name ?: "Main Dining",
+            subsectionName = subsection?.name ?: "Hall A",
+            guestCount = guestCount,
+            status = "active",
+            guests = initialGuests,
+            totalItems = 0,
+            grandTotal = 0.0
+        )
+        // Clear any old order for this table
+        _orders.value = _orders.value.filterNot { it.tableId == tableId }
+        val normalized = updateLocalOrder(newOrder)
         // Mark table occupied
         updateTableStatus(tableId, "occupied", normalized.guestCount, normalized.orderId)
+        syncManager?.enqueueAction(normalized.orderId, "CREATE_ORDER", mapOf("tableId" to tableId, "guestCount" to guestCount))
         Result.success(normalized)
     }
 
@@ -357,6 +390,23 @@ class RestaurantRepository private constructor() {
             totalItems = totalItems
         )
         updateLocalOrder(updatedOrder)
+        syncManager?.enqueueAction(
+            orderId, "ADD_ITEM", mapOf(
+                "orderId" to orderId,
+                "guestId" to guestId,
+                "productId" to productId,
+                "quantity" to quantity,
+                "spiceLevel" to spiceLevel,
+                "meatWellness" to meatWellness,
+                "allergies" to allergies?.joinToString(","),
+                "customAllergies" to customAllergies,
+                "addOns" to addOns?.joinToString(","),
+                "toppings" to toppings?.joinToString(","),
+                "onionFlag" to if (onionFlag) 1 else 0,
+                "garlicFlag" to if (garlicFlag) 1 else 0,
+                "specialInstructions" to specialInstructions
+            )
+        )
         Result.success(updatedOrder)
     }
 
@@ -389,6 +439,7 @@ class RestaurantRepository private constructor() {
             totalItems = totalItems
         )
         val normalized = updateLocalOrder(updatedOrder)
+        syncManager?.enqueueAction(orderId, "UPDATE_QTY", mapOf("itemId" to itemId, "newQty" to newQty))
         Result.success(normalized)
     }
 
@@ -413,6 +464,7 @@ class RestaurantRepository private constructor() {
         if (order.tableId != null) {
             updateTableStatus(order.tableId, "order-placed", normalized.guestCount, orderId)
         }
+        syncManager?.enqueueAction(orderId, "SEND_KOT", mapOf("orderId" to orderId))
         Result.success(normalized)
     }
 
@@ -453,10 +505,13 @@ class RestaurantRepository private constructor() {
         val grandTotal = order?.grandTotal ?: 0.0
         val saleId = "SALE-${System.currentTimeMillis() % 100000}"
         if (order?.tableId != null) {
-            updateTableStatus(order.tableId, "free", 0, null)
+            updateTableStatus(order.tableId, "available", 0, null)
+            _orders.value = _orders.value.filterNot { it.tableId == order.tableId || it.orderId == orderId }
+        } else {
+            _orders.value = _orders.value.filterNot { it.orderId == orderId }
         }
-        val updatedOrder = order?.copy(status = "finalized")
-        if (updatedOrder != null) updateLocalOrder(updatedOrder)
+
+        syncManager?.enqueueAction(orderId, "FINALIZE_ORDER", mapOf("orderId" to orderId))
 
         Result.success(FinalizeOrderResponse(
             saleId = saleId,
@@ -469,13 +524,16 @@ class RestaurantRepository private constructor() {
         try {
             val response = api.freeTable(tableId)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
+                _orders.value = _orders.value.filterNot { it.tableId == tableId }
                 updateTableStatus(tableId, "available", 0, null)
                 return@withContext Result.success(true)
             }
         } catch (e: Exception) {
             // fallback
         }
+        _orders.value = _orders.value.filterNot { it.tableId == tableId }
         updateTableStatus(tableId, "available", 0, null)
+        syncManager?.enqueueAction("TABLE-$tableId", "FREE_TABLE", mapOf("tableId" to tableId))
         Result.success(true)
     }
 
