@@ -135,7 +135,8 @@ interface RestaurantApiService {
         @Field("table_id") tableId: String,
         @Field("reserved_by") reservedBy: String,
         @Field("reserved_until") reservedUntil: String? = null,
-        @Field("reserved_note") reservedNote: String? = null
+        @Field("reserved_note") reservedNote: String? = null,
+        @Field("update_existing") updateExisting: Int = 0
     ): Response<ApiResponse<Map<String, String>>>
 
     @FormUrlEncoded

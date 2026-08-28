@@ -39,7 +39,10 @@ data class TableItem(
     @Json(name = "status") val status: String = "available", // available, occupied, reserved, order-placed, ready, free, served
     @Json(name = "guests_count") val guestsCount: Int? = 0,
     @Json(name = "occupied_time") val occupiedTime: String? = null,
-    @Json(name = "order_id") val orderId: String? = null
+    @Json(name = "order_id") val orderId: String? = null,
+    @Json(name = "reserved_by") val reservedBy: String? = null,
+    @Json(name = "reserved_until") val reservedUntil: String? = null,
+    @Json(name = "reserved_note") val reservedNote: String? = null
 )
 
 @JsonClass(generateAdapter = true)

@@ -537,6 +537,111 @@ class RestaurantRepository private constructor() {
         Result.success(true)
     }
 
+    suspend fun reserveTable(
+        tableId: String,
+        reservedBy: String,
+        reservedUntil: String,
+        reservedNote: String? = null,
+        updateExisting: Boolean = false
+    ): Result<Boolean> = withContext(Dispatchers.IO) {
+        val applyLocal = {
+            updateTableStatus(
+                tableId = tableId,
+                newStatus = "reserved",
+                guests = 0,
+                orderId = null,
+                reservedBy = reservedBy,
+                reservedUntil = reservedUntil,
+                reservedNote = reservedNote,
+                clearReservation = false
+            )
+        }
+        val enqueueOffline = suspend {
+            applyLocal()
+            syncManager?.enqueueAction(
+                "TABLE-$tableId",
+                "RESERVE_TABLE",
+                mapOf(
+                    "tableId" to tableId,
+                    "reservedBy" to reservedBy,
+                    "reservedUntil" to reservedUntil,
+                    "reservedNote" to reservedNote,
+                    "updateExisting" to if (updateExisting) 1 else 0
+                )
+            )
+            Result.success(true)
+        }
+
+        if (syncManager?.isOnline?.value == false) {
+            return@withContext enqueueOffline()
+        }
+
+        try {
+            val response = api.reserveTable(
+                tableId = tableId,
+                reservedBy = reservedBy,
+                reservedUntil = reservedUntil,
+                reservedNote = reservedNote,
+                updateExisting = if (updateExisting) 1 else 0
+            )
+            if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
+                applyLocal()
+                return@withContext Result.success(true)
+            }
+            val err = response.body()?.response?.error
+                ?: response.errorBody()?.string()?.let { raw ->
+                    Regex("\"error\"\\s*:\\s*\"([^\"]+)\"").find(raw)?.groupValues?.getOrNull(1)
+                }
+                ?: "Failed to reserve table"
+            return@withContext Result.failure(Exception(err))
+        } catch (e: Exception) {
+            enqueueOffline()
+        }
+    }
+
+    suspend fun unreserveTable(tableId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        val applyLocal = {
+            updateTableStatus(
+                tableId = tableId,
+                newStatus = "available",
+                guests = 0,
+                orderId = null,
+                reservedBy = null,
+                reservedUntil = null,
+                reservedNote = null
+            )
+        }
+        val enqueueOffline = suspend {
+            applyLocal()
+            syncManager?.enqueueAction(
+                "TABLE-$tableId",
+                "UNRESERVE_TABLE",
+                mapOf("tableId" to tableId)
+            )
+            Result.success(true)
+        }
+
+        if (syncManager?.isOnline?.value == false) {
+            return@withContext enqueueOffline()
+        }
+
+        try {
+            val response = api.unreserveTable(tableId)
+            if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
+                applyLocal()
+                return@withContext Result.success(true)
+            }
+            val err = response.body()?.response?.error
+                ?: response.errorBody()?.string()?.let { raw ->
+                    Regex("\"error\"\\s*:\\s*\"([^\"]+)\"").find(raw)?.groupValues?.getOrNull(1)
+                }
+                ?: "Failed to cancel reservation"
+            return@withContext Result.failure(Exception(err))
+        } catch (e: Exception) {
+            enqueueOffline()
+        }
+    }
+
     private fun updateLocalOrder(order: OrderBootstrap): OrderBootstrap {
         val individualGuests = order.guests.filter { it.guestId != 0 }
         val normalizedGuestCount = maxOf(order.guestCount, individualGuests.size, 1)
@@ -552,6 +657,17 @@ class RestaurantRepository private constructor() {
             guests = fullGuestsList
         )
 
+        if (!normalizedOrder.tableId.isNullOrBlank()) {
+            val statusToSet = when (normalizedOrder.status.lowercase()) {
+                "kot_sent", "kot sent", "order-placed", "order placed" -> "order-placed"
+                "ready", "prepared", "kitchen_ready" -> "ready"
+                "served", "food_served" -> "served"
+                "finalized", "completed" -> "available"
+                else -> "occupied"
+            }
+            updateTableStatus(normalizedOrder.tableId, statusToSet, normalizedOrder.guestCount, normalizedOrder.orderId)
+        }
+
         val list = _orders.value.toMutableList()
         val index = list.indexOfFirst { 
             (!it.orderId.isNullOrBlank() && it.orderId == normalizedOrder.orderId) || 
@@ -562,10 +678,26 @@ class RestaurantRepository private constructor() {
         return normalizedOrder
     }
 
-    private fun updateTableStatus(tableId: String, newStatus: String, guests: Int = 0, orderId: String? = null) {
+    private fun updateTableStatus(
+        tableId: String,
+        newStatus: String,
+        guests: Int = 0,
+        orderId: String? = null,
+        reservedBy: String? = null,
+        reservedUntil: String? = null,
+        reservedNote: String? = null,
+        clearReservation: Boolean = newStatus != "reserved"
+    ) {
         _tables.value = _tables.value.map { t ->
             if (t.id == tableId) {
-                t.copy(status = newStatus, guestsCount = guests, orderId = orderId)
+                t.copy(
+                    status = newStatus,
+                    guestsCount = guests,
+                    orderId = orderId,
+                    reservedBy = if (clearReservation && newStatus != "reserved") null else (reservedBy ?: t.reservedBy),
+                    reservedUntil = if (clearReservation && newStatus != "reserved") null else (reservedUntil ?: t.reservedUntil),
+                    reservedNote = if (clearReservation && newStatus != "reserved") null else (reservedNote ?: t.reservedNote)
+                )
             } else t
         }
     }

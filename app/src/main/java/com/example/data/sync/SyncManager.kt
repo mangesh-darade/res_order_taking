@@ -151,6 +151,26 @@ class SyncManager private constructor(context: Context) {
                     val res = api.freeTable(tableId)
                     res.isSuccessful && res.body()?.response?.status == "SUCCESS"
                 }
+                "RESERVE_TABLE" -> {
+                    val tableId = payload["tableId"] as? String ?: return true
+                    val reservedBy = payload["reservedBy"] as? String ?: return true
+                    val reservedUntil = payload["reservedUntil"] as? String ?: return true
+                    val reservedNote = payload["reservedNote"] as? String
+                    val updateExisting = (payload["updateExisting"] as? Number)?.toInt() ?: 0
+                    val res = api.reserveTable(
+                        tableId = tableId,
+                        reservedBy = reservedBy,
+                        reservedUntil = reservedUntil,
+                        reservedNote = reservedNote,
+                        updateExisting = updateExisting
+                    )
+                    res.isSuccessful && res.body()?.response?.status == "SUCCESS"
+                }
+                "UNRESERVE_TABLE" -> {
+                    val tableId = payload["tableId"] as? String ?: return true
+                    val res = api.unreserveTable(tableId)
+                    res.isSuccessful && res.body()?.response?.status == "SUCCESS"
+                }
                 else -> true
             }
         } catch (e: Exception) {
