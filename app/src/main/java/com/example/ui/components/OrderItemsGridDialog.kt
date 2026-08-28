@@ -153,16 +153,6 @@ fun OrderItemsGridDialog(
                         )
                     }
 
-                    // Table Items (GuestId = 0)
-                    val tableItemsCount = allGridItems.count { it.guestId == 0 }
-                    item {
-                        FilterTabChip(
-                            label = "Table Items ($tableItemsCount)",
-                            isSelected = selectedFilter == 0,
-                            onClick = { selectedFilter = 0 }
-                        )
-                    }
-
                     // Individual Guests (GuestId > 0)
                     val individualGuests = order.guests.filter { it.guestId > 0 }
                     items(individualGuests) { g ->

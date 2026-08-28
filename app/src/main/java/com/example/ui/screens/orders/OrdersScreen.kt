@@ -381,10 +381,10 @@ fun OrdersScreen(
                             )
                         }
 
-                        items(order.guests) { guest ->
+                        items(order.guests.filter { it.guestId != 0 }) { guest ->
                             val isSelected = uiState.selectedGuestFilter == guest.guestId
                             val isServed = guest.items.isNotEmpty() && guest.items.all { it.status == "ready" || it.status == "served" }
-                            val label = if (guest.guestId == 0) "Table Items" else "Guest ${guest.guestId}"
+                            val label = "Guest ${guest.guestId}"
                             GuestChip(
                                 label = label,
                                 isSelected = isSelected,
