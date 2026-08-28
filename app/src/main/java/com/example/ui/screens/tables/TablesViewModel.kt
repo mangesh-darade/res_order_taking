@@ -20,6 +20,7 @@ data class TablesUiState(
     val subsectionName: String? = "Hall A",
     val tables: List<TableItem> = emptyList(),
     val confirmDialogTable: TableItem? = null,
+    val reserveDialogTable: TableItem? = null,
     val snackbarMessage: String? = null
 )
 
@@ -82,7 +83,59 @@ class TablesViewModel(
     }
 
     fun dismissConfirmDialog() {
-        _uiState.value = _uiState.value.copy(confirmDialogTable = null)
+        _uiState.value = _uiState.value.copy(confirmDialogTable = null, reserveDialogTable = null)
+    }
+
+    fun showReserveDialog(table: TableItem) {
+        _uiState.value = _uiState.value.copy(reserveDialogTable = table)
+    }
+
+    fun reserveTable(
+        tableId: String,
+        customerName: String,
+        reservedUntil: String,
+        reservedNote: String? = null,
+        updateExisting: Boolean = false
+    ) {
+        viewModelScope.launch {
+            val result = repository.reserveTable(
+                tableId = tableId,
+                reservedBy = customerName,
+                reservedUntil = reservedUntil,
+                reservedNote = reservedNote,
+                updateExisting = updateExisting
+            )
+            result.onSuccess {
+                dismissConfirmDialog()
+                _uiState.value = _uiState.value.copy(
+                    snackbarMessage = if (updateExisting) {
+                        "Reservation updated successfully"
+                    } else {
+                        "Table reserved successfully"
+                    }
+                )
+                loadTables(silent = true)
+            }.onFailure { e ->
+                _uiState.value = _uiState.value.copy(
+                    snackbarMessage = e.message ?: "Failed to reserve table"
+                )
+            }
+        }
+    }
+
+    fun unreserveTable(tableId: String) {
+        viewModelScope.launch {
+            val result = repository.unreserveTable(tableId)
+            result.onSuccess {
+                dismissConfirmDialog()
+                _uiState.value = _uiState.value.copy(snackbarMessage = "Table reservation cancelled")
+                loadTables(silent = true)
+            }.onFailure { e ->
+                _uiState.value = _uiState.value.copy(
+                    snackbarMessage = e.message ?: "Failed to cancel reservation"
+                )
+            }
+        }
     }
 
     fun freeTable(tableId: String) {

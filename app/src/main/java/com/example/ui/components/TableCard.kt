@@ -1,8 +1,9 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -23,10 +24,12 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.TableItem
 import com.example.ui.theme.*
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TableCard(
     table: TableItem,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     onFreeClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -34,148 +37,151 @@ fun TableCard(
 
     // Background color based on table status
     val cardBg = when (statusLower) {
-        "occupied" -> Color(0xFFA2E5FF)                                       // Light Blue
-        "order-placed", "placed", "kitchen", "kot_sent" -> Color(0xFFFFCC80)   // Warm Amber / Yellow
-        "ready" -> Color(0xFFC8E6C9)                                          // Ready Light Green
-        "served" -> Color(0xFFFF7EB6)                                         // Rose / Pink (Served)
-        "reserved" -> Color(0xFFE1BEE7)                                       // Reserved Light Purple
-        "free" -> Color(0xFFE0E0E0)                                           // Free Light Gray
-        else -> Color(0xFFF1F5F9)                                             // Available Soft Off-White
+        "occupied" -> Color(0xFFA2E5FF)
+        "order-placed", "placed", "kitchen", "kot_sent" -> Color(0xFFFFCC80)
+        "ready" -> Color(0xFFC8E6C9)
+        "served" -> Color(0xFFFF7EB6)
+        "reserved" -> Color(0xFFFFFF99) // Exact Yellow per specification for Reserved
+        "free" -> Color(0xFFFFCDD2)    // Exact Red tint for Free
+        else -> Color(0xFFF8FAFC)
     }
 
     val isAvailable = statusLower == "available"
-    val isOccupiedOrActive = statusLower in listOf("occupied", "order-placed", "placed", "kitchen", "kot_sent", "served", "ready")
 
     val tableTextColor = when {
-        statusLower == "occupied" -> Color(0xFFB392C9)    // Pastel Purple
-        statusLower in listOf("order-placed", "placed", "kitchen", "kot_sent") -> Color(0xFFD97706) // Darker Amber
-        statusLower == "ready" -> Color(0xFF16A34A)       // Dark Green
-        statusLower == "served" -> Color(0xFF7A0030)      // Deep Rose / Burgundy
-        statusLower == "reserved" -> Color(0xFF9333EA)
+        statusLower == "occupied" -> Color(0xFF0284C7)
+        statusLower in listOf("order-placed", "placed", "kitchen", "kot_sent") -> Color(0xFFD97706)
+        statusLower == "ready" -> Color(0xFF16A34A)
+        statusLower == "served" -> Color(0xFFBE185D)
+        statusLower == "reserved" -> Color(0xFF856404) // Dark Gold/Yellow text
+        statusLower == "free" -> Color(0xFFB71C1C)
         else -> PinkPrimary
     }
 
     val displayTime = formatDisplayTime(table.occupiedTime)
-    val cardShape = RoundedCornerShape(16.dp)
+    val reservedUntilShort = if (statusLower == "reserved") {
+        formatReservedUntilShort(table.reservedUntil)
+    } else {
+        null
+    }
+    val headerLabel = when {
+        statusLower == "reserved" && !reservedUntilShort.isNullOrBlank() -> "Until $reservedUntilShort"
+        !displayTime.isNullOrBlank() -> displayTime
+        isAvailable -> "Available"
+        else -> table.status.uppercase()
+    }
+    val cardShape = RoundedCornerShape(14.dp)
 
     Card(
         modifier = modifier
-            .height(95.dp)
+            .height(108.dp)
             .fillMaxWidth()
             .clip(cardShape)
             .border(
-                width = if (isAvailable) 1.5.dp else 0.dp,
-                color = if (isAvailable) PinkPrimary.copy(alpha = 0.35f) else Color.Transparent,
+                width = 1.5.dp,
+                color = if (isAvailable) PinkPrimary.copy(alpha = 0.4f) else tableTextColor.copy(alpha = 0.5f),
                 shape = cardShape
             )
-            .clickable { onClick() }
+            .combinedClickable(
+                onClick = { onClick() },
+                onLongClick = { onLongClick?.invoke() }
+            )
             .testTag("table_card_${table.id}"),
         shape = cardShape,
         colors = CardDefaults.cardColors(containerColor = cardBg),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxSize(),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp),
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // ================= LEFT SECTION (Time & Large Table Number with +) =================
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .padding(vertical = 6.dp, horizontal = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween
+            // Header Row: Status Name & Guests Icon
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Top: Occupied Time (or Status label)
-                if (!displayTime.isNullOrBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = if (isAvailable) PinkPrimary.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.3f),
+                    modifier = Modifier.padding(2.dp)
+                ) {
                     Text(
-                        text = displayTime,
-                        fontSize = 13.sp,
+                        text = headerLabel,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        letterSpacing = 0.5.sp
-                    )
-                } else {
-                    Text(
-                        text = if (isAvailable) "Available" else table.status.uppercase(),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (isAvailable) PinkPrimary else Color.White.copy(alpha = 0.9f)
+                        color = if (isAvailable) PinkPrimary else tableTextColor,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        maxLines = 1
                     )
                 }
 
-                // Center: Big Table Number with centered '+' (e.g. T1 instead of Table 1)
-                val shortTableNumber = table.tableNumber
-                    .replace(Regex("(?i)table\\s*[-_]?"), "T")
-                    .trim()
-
-                Box(
-                    modifier = Modifier.weight(1f),
-                    contentAlignment = Alignment.Center
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(end = 4.dp)
                 ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "Guests",
+                        tint = tableTextColor,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(2.dp))
                     Text(
-                        text = shortTableNumber,
-                        fontSize = if (shortTableNumber.length > 3) 28.sp else 34.sp,
+                        text = (table.guestsCount ?: 0).toString(),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = tableTextColor
+                    )
+                }
+            }
+
+            // Center Table Name Text Display
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = table.tableNumber,
+                        fontSize = when {
+                            table.tableNumber.length > 7 -> 14.sp
+                            table.tableNumber.length > 4 -> 17.sp
+                            else -> 22.sp
+                        },
                         fontWeight = FontWeight.Black,
                         color = tableTextColor,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         softWrap = false
                     )
-
-                    if (isOccupiedOrActive) {
-                        Text(
-                            text = "+",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White.copy(alpha = 0.95f),
-                            textAlign = TextAlign.Center
-                        )
+                    if (statusLower == "reserved") {
+                        if (!table.reservedBy.isNullOrBlank()) {
+                            Text(
+                                text = table.reservedBy,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = tableTextColor.copy(alpha = 0.85f),
+                                textAlign = TextAlign.Center,
+                                maxLines = 1
+                            )
+                        }
+                        if (!reservedUntilShort.isNullOrBlank()) {
+                            Text(
+                                text = reservedUntilShort,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = tableTextColor.copy(alpha = 0.75f),
+                                textAlign = TextAlign.Center,
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
-            }
-
-            // ================= VERTICAL DIVIDER LINE =================
-            Box(
-                modifier = Modifier
-                    .width(1.dp)
-                    .fillMaxHeight()
-                    .background(Color(0x33B392C9))
-            )
-
-            // ================= RIGHT SECTION (Person Icon & Guest Count) =================
-            Column(
-                modifier = Modifier
-                    .width(52.dp)
-                    .fillMaxHeight()
-                    .padding(vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = "Guests",
-                    tint = if (isAvailable) PinkPrimary.copy(alpha = 0.6f) else Color.White,
-                    modifier = Modifier.size(18.dp)
-                )
-
-                Spacer(modifier = Modifier.height(2.dp))
-
-                val guests = if (table.guestsCount != null && table.guestsCount > 0) {
-                    table.guestsCount.toString()
-                } else if (isAvailable) {
-                    "0"
-                } else {
-                    "2"
-                }
-
-                Text(
-                    text = guests,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = if (isAvailable) PinkPrimary.copy(alpha = 0.8f) else Color.White
-                )
             }
         }
     }
@@ -201,5 +207,30 @@ private fun formatDisplayTime(raw: String?): String? {
         }
     } catch (e: Exception) {
         raw
+    }
+}
+
+/** Same day → "6:30 PM"; other day → "28 Aug 6:30 PM" */
+private fun formatReservedUntilShort(raw: String?): String? {
+    if (raw.isNullOrBlank()) return null
+    return try {
+        val cleaned = raw.trim().replace('T', ' ').let {
+            if (Regex("""^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$""").matches(it)) "$it:00" else it
+        }
+        val inFmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+        inFmt.isLenient = false
+        val parsed = inFmt.parse(cleaned) ?: return formatDisplayTime(raw)
+        val cal = java.util.Calendar.getInstance().apply { time = parsed }
+        val today = java.util.Calendar.getInstance()
+        val sameDay = cal.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
+            cal.get(java.util.Calendar.DAY_OF_YEAR) == today.get(java.util.Calendar.DAY_OF_YEAR)
+        val outFmt = if (sameDay) {
+            java.text.SimpleDateFormat("h:mm a", java.util.Locale.US)
+        } else {
+            java.text.SimpleDateFormat("d MMM h:mm a", java.util.Locale.US)
+        }
+        outFmt.format(parsed)
+    } catch (_: Exception) {
+        formatDisplayTime(raw)
     }
 }
