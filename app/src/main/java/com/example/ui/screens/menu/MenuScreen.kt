@@ -361,6 +361,20 @@ fun MenuItemCard(
                     fontWeight = FontWeight.ExtraBold,
                     color = PinkPrimary
                 )
+                if (item.stockWarning == true) {
+                    Text(
+                        text = "Low/Zero stock",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFD97706)
+                    )
+                } else if (!item.station.isNullOrBlank()) {
+                    Text(
+                        text = item.station!!,
+                        fontSize = 11.sp,
+                        color = TextMuted
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(8.dp))
