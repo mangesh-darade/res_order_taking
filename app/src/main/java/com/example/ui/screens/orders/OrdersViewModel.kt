@@ -2,7 +2,11 @@ package com.example.ui.screens.orders
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.model.CustomizationOption
+import com.example.data.model.MenuItem
 import com.example.data.model.OrderBootstrap
+import com.example.data.model.OrderItem
+import com.example.data.model.ProductCustomization
 import com.example.data.model.TableItem
 import com.example.data.repository.RestaurantRepository
 import kotlinx.coroutines.Job
@@ -21,7 +25,11 @@ data class OrdersUiState(
     val selectedGuestFilter: Int = -1, // -1 = All, 0 = Table Items, 1..N = Guest 1..N
     val snackbarMessage: String? = null,
     val isFinalized: Boolean = false,
-    val isSendingKot: Boolean = false
+    val isSendingKot: Boolean = false,
+    val editItem: OrderItem? = null,
+    val editMenuItem: MenuItem? = null,
+    val editCustomization: ProductCustomization? = null,
+    val isEditLoading: Boolean = false
 )
 
 class OrdersViewModel(
@@ -119,6 +127,121 @@ class OrdersViewModel(
             val result = repository.updateItemQuantity(orderId, itemId, newQty)
             result.onSuccess { updated ->
                 _uiState.value = _uiState.value.copy(order = updated)
+            }.onFailure { e ->
+                _uiState.value = _uiState.value.copy(
+                    snackbarMessage = e.message ?: "Could not update item"
+                )
+            }
+        }
+    }
+
+    /** Tap pending/kot item → reopen customize sheet in edit mode. */
+    fun openEditItem(item: OrderItem) {
+        val st = item.status?.lowercase()?.trim().orEmpty()
+        if (st in listOf("cancelled", "canceled")) {
+            return
+        }
+        if (st in listOf("ready", "served")) {
+            _uiState.value = _uiState.value.copy(
+                snackbarMessage = "Item already $st — cancel and re-add to change customization."
+            )
+            return
+        }
+        viewModelScope.launch {
+            val menuItem = MenuItem(
+                id = item.productId,
+                name = item.productName,
+                price = item.price,
+                vegType = item.vegType
+            )
+            _uiState.value = _uiState.value.copy(
+                editItem = item,
+                editMenuItem = menuItem,
+                editCustomization = null,
+                isEditLoading = true
+            )
+            val result = repository.fetchProductCustomizations(item.productId)
+            result.onSuccess { custom ->
+                _uiState.value = _uiState.value.copy(
+                    editCustomization = custom,
+                    isEditLoading = false
+                )
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(
+                    isEditLoading = false,
+                    snackbarMessage = "Could not load customization options"
+                )
+            }
+        }
+    }
+
+    fun closeEditItem() {
+        _uiState.value = _uiState.value.copy(
+            editItem = null,
+            editMenuItem = null,
+            editCustomization = null,
+            isEditLoading = false
+        )
+    }
+
+    fun addCustomAllergyForEdit(
+        name: String,
+        onResult: (Result<CustomizationOption>) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = repository.addAllergy(name)
+            result.onSuccess { option ->
+                val current = _uiState.value.editCustomization
+                if (current != null) {
+                    val existing = current.allergies.orEmpty()
+                    val already = existing.any { it.name.equals(option.name, ignoreCase = true) }
+                    val updatedList = if (already) existing else existing + option
+                    _uiState.value = _uiState.value.copy(
+                        editCustomization = current.copy(allergies = updatedList)
+                    )
+                }
+            }
+            onResult(result)
+        }
+    }
+
+    fun saveEditItem(
+        qty: Int,
+        spice: String?,
+        meat: String?,
+        allergies: List<String>,
+        addOns: List<String>,
+        toppings: List<String>,
+        noOnion: Boolean,
+        noGarlic: Boolean,
+        specialInstructions: String?
+    ) {
+        val order = _uiState.value.order ?: return
+        val orderId = order.orderId ?: return
+        val item = _uiState.value.editItem ?: return
+        viewModelScope.launch {
+            val result = repository.updateItemDetails(
+                orderId = orderId,
+                itemId = item.id,
+                quantity = qty,
+                spiceLevel = spice,
+                meatWellness = meat,
+                allergies = allergies,
+                addOns = addOns,
+                toppings = toppings,
+                onionFlag = noOnion,
+                garlicFlag = noGarlic,
+                specialInstructions = specialInstructions
+            )
+            result.onSuccess { updated ->
+                _uiState.value = _uiState.value.copy(
+                    order = updated,
+                    editItem = null,
+                    editMenuItem = null,
+                    editCustomization = null,
+                    isEditLoading = false,
+                    snackbarMessage = "Item updated"
+                )
             }.onFailure { e ->
                 _uiState.value = _uiState.value.copy(
                     snackbarMessage = e.message ?: "Could not update item"

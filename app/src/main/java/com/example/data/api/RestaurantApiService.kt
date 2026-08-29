@@ -118,8 +118,8 @@ interface RestaurantApiService {
         @Field("custom_allergies") customAllergies: String? = null,
         @Field("add_ons") addOns: String? = null,
         @Field("toppings") toppings: String? = null,
-        @Field("onion_flag") onionFlag: Int = 0,
-        @Field("garlic_flag") garlicFlag: Int = 0,
+        @Field("onion_flag") onionFlag: Int? = null,
+        @Field("garlic_flag") garlicFlag: Int? = null,
         @Field("special_instructions") specialInstructions: String? = null
     ): Response<ApiResponse<OrderBootstrap>>
 

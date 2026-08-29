@@ -30,6 +30,7 @@ import com.example.ui.components.TopHeaderBar
 import com.example.ui.theme.BackgroundGray
 import com.example.ui.theme.PinkPrimary
 import com.example.ui.theme.TextDark
+import com.example.ui.theme.TextMuted
 import java.util.Calendar
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -120,6 +121,51 @@ fun TablesScreen(
                 }
             }
 
+            // Non-blocking pick banner — tables stay tappable (do NOT use AlertDialog here)
+            if (uiState.pickTargetMode != null) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    color = if (uiState.pickTargetMode == "merge") Color(0xFFE0F2FE) else Color(0xFFFCE7F3),
+                    shape = RoundedCornerShape(10.dp),
+                    shadowElevation = 2.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (uiState.pickTargetMode == "merge") {
+                                    "Pick merge target"
+                                } else {
+                                    "Pick transfer target"
+                                },
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = TextDark
+                            )
+                            Text(
+                                text = if (uiState.pickTargetMode == "merge") {
+                                    "Tap another table to merge into."
+                                } else {
+                                    "Tap an empty/available table to move the order."
+                                },
+                                fontSize = 12.sp,
+                                color = TextMuted
+                            )
+                        }
+                        TextButton(onClick = { viewModel.cancelPickTarget() }) {
+                            Text("Cancel", color = PinkPrimary, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -150,14 +196,14 @@ fun TablesScreen(
                                     }
                                 },
                                 onLongClick = {
-                                    // free → Mark Available / Reserve
-                                    // available|reserved → reserve dialog
-                                    // active (occupied+) → transfer / merge / free
-                                    when (table.status.lowercase()) {
-                                        "free" -> viewModel.showFreeActionsDialog(table)
-                                        "available" -> viewModel.showReserveDialog(table)
-                                        "reserved" -> viewModel.showReserveDialog(table)
-                                        else -> viewModel.showOpsDialog(table)
+                                    // While picking target, ignore long-press
+                                    if (uiState.pickTargetMode == null) {
+                                        when (table.status.lowercase()) {
+                                            "free" -> viewModel.showFreeActionsDialog(table)
+                                            "available" -> viewModel.showReserveDialog(table)
+                                            "reserved" -> viewModel.showReserveDialog(table)
+                                            else -> viewModel.showOpsDialog(table)
+                                        }
                                     }
                                 },
                                 onFreeClick = { viewModel.showFreeConfirmDialog(table) }
@@ -336,31 +382,7 @@ fun TablesScreen(
         )
     }
 
-    if (uiState.pickTargetMode != null) {
-        AlertDialog(
-            onDismissRequest = { viewModel.cancelPickTarget() },
-            title = {
-                Text(
-                    text = if (uiState.pickTargetMode == "merge") "Pick merge target" else "Pick transfer target",
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Text(
-                    text = if (uiState.pickTargetMode == "merge") {
-                        "Tap any other table on the floor to merge into it."
-                    } else {
-                        "Tap an empty/available table to move this order."
-                    }
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { viewModel.cancelPickTarget() }) {
-                    Text("Cancel pick")
-                }
-            }
-        )
-    }
+    // Pick mode uses top banner only — no blocking dialog (tables must stay tappable)
 
     if (uiState.reserveDialogTable != null) {
         ReserveTableDialog(

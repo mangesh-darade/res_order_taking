@@ -4,6 +4,8 @@
 **API:** `http://…/ElintOm/ordertakingapi/`  
 **Purpose:** Full functional test from app start → table colors → KOT/KDS → cancel → bill → free/available.
 
+Staff / full product guide (kay aahe, kasa chaltoy): [ORDER_TAKING_MANUAL_GUIDE.md](./ORDER_TAKING_MANUAL_GUIDE.md)
+
 ---
 
 ## 1. Setup (before testing)
@@ -123,12 +125,33 @@ Use one empty table (e.g. **AC-02** or **T-03**).
 | Transfer | Long-press occupied+ → Transfer → tap empty table | Order moves; source freed/available; target occupied+ |
 | Merge | Long-press → Merge → tap other table | Bills combined on target |
 
-### 6.5 Stock warning
+### 6.5 Stock (POS `Settings.overselling`)
 
 | Check | Expect |
 |-------|--------|
-| Menu item | May show Low/Zero stock warning |
-| ADD | Still allowed (unless API `strict_stock=1`) |
+| `overselling=1` (default) | Low/Zero stock warning; **ADD allowed** |
+| `overselling=0` (System Settings / POS) | `in_stock=false` when qty≤0; ADD disabled; API `Out of stock` |
+| Branding | `overselling` + derived `strict_stock` (`1` when overselling off) |
+
+Change stock policy only in **ElintOm System Settings → Overselling** — no separate app API.
+
+### 6.6 Customize (veg / masters)
+
+| Check | Expect |
+|-------|--------|
+| Veg (`meal_type_id=1` in `sma_res_product_details`) | No **Meat Wellness** |
+| Non-veg (`meal_type_id=2`) | Meat Wellness shown |
+| Add-ons / toppings | From master tables |
+| Custom allergy + | DB save + selected |
+
+### 6.7 Offline / multi-device
+
+| Check | Expect |
+|-------|--------|
+| Create order on table that already has open order | API returns existing order (no duplicate) |
+| Offline ADD then online | Queue syncs; ID maps persist across restart |
+| Double FINALIZE / KOT from 2 devices | Second treated as done / dropped, queue not stuck |
+| Stale queue > 72h | Dropped on sync |
 
 ---
 

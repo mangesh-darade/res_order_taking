@@ -157,7 +157,11 @@ data class BrandingInfo(
     @Json(name = "decimals_sep") val decimalsSep: String? = ".",
     @Json(name = "thousands_sep") val thousandsSep: String? = ",",
     @Json(name = "server_time") val serverTime: String? = null,
-    @Json(name = "pos_type") val posType: String? = "restaurant"
+    @Json(name = "pos_type") val posType: String? = "restaurant",
+    /** POS Settings.overselling: 1 = allow (soft), 0 = hard-block out of stock. */
+    @Json(name = "overselling") val overselling: Int? = 1,
+    /** Derived: 1 when overselling=0. */
+    @Json(name = "strict_stock") val strictStock: Int? = 0
 )
 
 @JsonClass(generateAdapter = true)

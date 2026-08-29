@@ -237,13 +237,11 @@ class RestaurantRepository private constructor() {
         val newCount = (currentGuestCount + delta).coerceAtLeast(1)
 
         val guests = if (newCount > currentIndividualGuests.size) {
-            currentIndividualGuests + (currentIndividualGuests.size + 1..newCount).map { 
-                GuestOrder(guestId = it, guestName = "Guest $it") 
+            currentIndividualGuests + (currentIndividualGuests.size + 1..newCount).map {
+                GuestOrder(guestId = it, guestName = "Guest $it")
             }
         } else {
-            // Keep at least newCount guests
-            val trimmed = currentIndividualGuests.take(newCount)
-            trimmed
+            currentIndividualGuests.take(newCount)
         }
         val tableItemsGuest = order.guests.find { it.guestId == 0 }
         val allGuests = if (tableItemsGuest != null) listOf(tableItemsGuest) + guests else guests
@@ -294,20 +292,52 @@ class RestaurantRepository private constructor() {
         try {
             val response = api.getProductCustomizations(productId)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
-                response.body()?.data?.let { return@withContext Result.success(it) }
+                response.body()?.data?.let {
+                    _customizations.value = _customizations.value + (productId to it)
+                    return@withContext Result.success(it)
+                }
             }
         } catch (e: Exception) {
-            // fallback
+            // offline: use last cached for this product if any
         }
-        val custom = _customizations.value[productId] ?: ProductCustomization(
-            productId = productId,
-            addOns = listOf(CustomizationOption("1", "Extra Cheese", 1.50), CustomizationOption("2", "Extra Sauce", 0.99)),
-            toppings = listOf(CustomizationOption("1", "Mushroom", 1.20), CustomizationOption("2", "Olives", 1.00), CustomizationOption("3", "Jalapenos", 0.80)),
-            allergies = listOf(CustomizationOption("1", "Nut Allergy", 0.0), CustomizationOption("2", "Gluten Free", 0.0), CustomizationOption("3", "Dairy Free", 0.0)),
-            meatWellness = listOf("Rare", "Medium Rare", "Medium", "Well Done"),
-            spiceLevels = listOf("Mild", "Medium", "Hot", "Extra Hot")
+        // No fake Extra Cheese / demo chips — empty sections hide in UI; masters live in DB
+        val cached = _customizations.value[productId]
+        if (cached != null) {
+            return@withContext Result.success(cached)
+        }
+        Result.success(
+            ProductCustomization(
+                productId = productId,
+                addOns = emptyList(),
+                toppings = emptyList(),
+                allergies = emptyList(),
+                meatWellness = emptyList(),
+                spiceLevels = listOf("Mild", "Medium", "Spicy", "Extra Hot")
+            )
         )
-        Result.success(custom)
+    }
+
+    suspend fun addAllergy(name: String): Result<CustomizationOption> = withContext(Dispatchers.IO) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) {
+            return@withContext Result.failure(Exception("Allergy name is required"))
+        }
+        try {
+            val response = api.addAllergy(trimmed)
+            if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
+                val data = response.body()?.data
+                val id = data?.get("id").orEmpty().ifBlank { "custom-${System.currentTimeMillis()}" }
+                val savedName = data?.get("name").orEmpty().ifBlank { trimmed }
+                return@withContext Result.success(CustomizationOption(id, savedName, 0.0))
+            }
+            val err = response.body()?.response?.error
+            if (!err.isNullOrBlank()) {
+                return@withContext Result.failure(Exception(err))
+            }
+        } catch (e: Exception) {
+            return@withContext Result.failure(e)
+        }
+        Result.failure(Exception("Failed to add allergy"))
     }
 
     suspend fun addItemToOrder(
@@ -325,6 +355,14 @@ class RestaurantRepository private constructor() {
         garlicFlag: Boolean,
         specialInstructions: String?
     ): Result<OrderBootstrap> = withContext(Dispatchers.IO) {
+        val productCheck = _menuItems.value.find { it.id == productId }
+        // POS Settings.overselling: 0 = strict (block), 1 = soft allow — from branding
+        val overselling = _branding.value.overselling ?: 1
+        val strict = overselling == 0 || (_branding.value.strictStock ?: 0) == 1
+        if (strict && productCheck?.inStock == false) {
+            return@withContext Result.failure(Exception("Out of stock"))
+        }
+        val meatForApi = if (productCheck?.vegType.equals("non-veg", ignoreCase = true)) meatWellness else null
         try {
             val response = api.addItem(
                 orderId = orderId,
@@ -332,7 +370,7 @@ class RestaurantRepository private constructor() {
                 productId = productId,
                 quantity = quantity,
                 spiceLevel = spiceLevel,
-                meatWellness = meatWellness,
+                meatWellness = meatForApi,
                 allergies = allergies?.joinToString(","),
                 customAllergies = customAllergies,
                 addOns = addOns?.joinToString(","),
@@ -357,8 +395,7 @@ class RestaurantRepository private constructor() {
         } catch (e: Exception) {
             // fallback offline
         }
-        val productCheck = _menuItems.value.find { it.id == productId }
-        if (productCheck?.inStock == false) {
+        if (strict && (productCheck?.inStock == false || (productCheck?.stockQty != null && productCheck.stockQty < quantity))) {
             return@withContext Result.failure(Exception("Out of stock"))
         }
         // Fallback local memory state modification
@@ -376,7 +413,7 @@ class RestaurantRepository private constructor() {
             quantity = quantity,
             vegType = product?.vegType ?: "veg",
             spiceLevel = spiceLevel,
-            meatWellness = meatWellness,
+            meatWellness = meatForApi,
             allergies = allergies,
             customAllergies = customAllergies,
             addOns = addOns,
@@ -417,7 +454,7 @@ class RestaurantRepository private constructor() {
                 "quantity" to quantity,
                 "localItemId" to newItem.id,
                 "spiceLevel" to spiceLevel,
-                "meatWellness" to meatWellness,
+                "meatWellness" to meatForApi,
                 "allergies" to allergies?.joinToString(","),
                 "customAllergies" to customAllergies,
                 "addOns" to addOns?.joinToString(","),
@@ -480,6 +517,98 @@ class RestaurantRepository private constructor() {
         )
         val normalized = updateLocalOrder(updatedOrder)
         syncManager?.enqueueAction(orderId, "UPDATE_QTY", mapOf("itemId" to itemId, "newQty" to newQty))
+        Result.success(normalized)
+    }
+
+    /** Full customize edit for pending/kot items (spice, meat, allergies, add-ons, toppings, notes). */
+    suspend fun updateItemDetails(
+        orderId: String,
+        itemId: String,
+        quantity: Int,
+        spiceLevel: String?,
+        meatWellness: String?,
+        allergies: List<String>?,
+        addOns: List<String>?,
+        toppings: List<String>?,
+        onionFlag: Boolean,
+        garlicFlag: Boolean,
+        specialInstructions: String?
+    ): Result<OrderBootstrap> = withContext(Dispatchers.IO) {
+        val order = _orders.value.find { it.orderId == orderId }
+        val target = order?.guests?.flatMap { it.items }?.find { it.id == itemId }
+        val st = target?.status?.lowercase()?.trim().orEmpty()
+        if (st in listOf("cancelled", "canceled")) {
+            return@withContext Result.failure(Exception("Item already cancelled"))
+        }
+        if (st in listOf("ready", "served")) {
+            return@withContext Result.failure(Exception("Item already $st — cannot edit. Cancel and re-add."))
+        }
+        try {
+            val response = api.updateItem(
+                itemId = itemId,
+                quantity = quantity.coerceAtLeast(1),
+                spiceLevel = spiceLevel.orEmpty(),
+                meatWellness = meatWellness.orEmpty(),
+                allergies = allergies?.joinToString(",").orEmpty(),
+                customAllergies = null,
+                addOns = addOns?.joinToString(",").orEmpty(),
+                toppings = toppings?.joinToString(",").orEmpty(),
+                onionFlag = if (onionFlag) 1 else 0,
+                garlicFlag = if (garlicFlag) 1 else 0,
+                specialInstructions = specialInstructions.orEmpty()
+            )
+            if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
+                response.body()?.data?.let {
+                    return@withContext Result.success(updateLocalOrder(it))
+                }
+            }
+            val err = response.body()?.response?.error
+            if (!err.isNullOrBlank()) {
+                return@withContext Result.failure(Exception(err))
+            }
+        } catch (e: Exception) {
+            // offline local patch
+        }
+        val current = _orders.value.find { it.orderId == orderId }
+            ?: return@withContext Result.failure(Exception("Order not found"))
+        val updatedGuests = current.guests.map { g ->
+            g.copy(items = g.items.map { item ->
+                if (item.id != itemId) item
+                else item.copy(
+                    quantity = quantity.coerceAtLeast(1),
+                    spiceLevel = spiceLevel,
+                    meatWellness = meatWellness,
+                    allergies = allergies,
+                    addOns = addOns,
+                    toppings = toppings,
+                    onionFlag = onionFlag,
+                    garlicFlag = garlicFlag,
+                    specialInstructions = specialInstructions
+                )
+            })
+        }
+        val grandTotal = updatedGuests.flatMap { it.items }.sumOf { it.price * it.quantity }
+        val totalItems = updatedGuests.flatMap { it.items }.sumOf { it.quantity }
+        val updatedOrder = current.copy(
+            guests = updatedGuests,
+            grandTotal = grandTotal,
+            totalItems = totalItems
+        )
+        val normalized = updateLocalOrder(updatedOrder)
+        syncManager?.enqueueAction(
+            orderId, "UPDATE_ITEM", mapOf(
+                "itemId" to itemId,
+                "quantity" to quantity.coerceAtLeast(1),
+                "spiceLevel" to spiceLevel,
+                "meatWellness" to meatWellness,
+                "allergies" to allergies?.joinToString(","),
+                "addOns" to addOns?.joinToString(","),
+                "toppings" to toppings?.joinToString(","),
+                "onionFlag" to if (onionFlag) 1 else 0,
+                "garlicFlag" to if (garlicFlag) 1 else 0,
+                "specialInstructions" to specialInstructions
+            )
+        )
         Result.success(normalized)
     }
 

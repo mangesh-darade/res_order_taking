@@ -108,6 +108,28 @@ class MenuViewModel(
         _uiState.value = _uiState.value.copy(customDialogItem = null, customizationData = null)
     }
 
+    /** Save custom allergy to DB master list, refresh sheet list, return option for selection. */
+    fun addCustomAllergy(
+        name: String,
+        onResult: (Result<com.example.data.model.CustomizationOption>) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = repository.addAllergy(name)
+            result.onSuccess { option ->
+                val current = _uiState.value.customizationData
+                if (current != null) {
+                    val existing = current.allergies.orEmpty()
+                    val already = existing.any { it.name.equals(option.name, ignoreCase = true) }
+                    val updatedList = if (already) existing else existing + option
+                    _uiState.value = _uiState.value.copy(
+                        customizationData = current.copy(allergies = updatedList)
+                    )
+                }
+            }
+            onResult(result)
+        }
+    }
+
     fun addItemToOrder(
         item: MenuItem,
         qty: Int,

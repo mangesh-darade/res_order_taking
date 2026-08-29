@@ -32,12 +32,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.model.GuestOrder
 import com.example.data.model.OrderItem
 import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.ReceiptLong
-import com.example.ui.components.InvoiceDialog
 import com.example.ui.components.OrderItemsGridDialog
 import com.example.ui.components.MainTab
 import com.example.ui.components.SharedTabStrip
 import com.example.ui.components.TopHeaderBar
+import com.example.ui.screens.menu.CustomizationBottomSheet
 import com.example.ui.theme.*
 import com.example.util.CurrencyConfig
 
@@ -53,7 +52,6 @@ fun OrdersScreen(
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var tableDropdownExpanded by remember { mutableStateOf(false) }
-    var showInvoiceDialog by remember { mutableStateOf(false) }
     var showGridPopup by remember { mutableStateOf(false) }
     var gridPopupInitialGuest by remember { mutableStateOf<Int?>(null) }
 
@@ -334,30 +332,7 @@ fun OrdersScreen(
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
-                            Spacer(modifier = Modifier.width(6.dp))
-                            // 🧾 Thermal Invoice Receipt Preview Button
-                            IconButton(
-                                onClick = { showInvoiceDialog = true },
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .background(PinkLightBg, CircleShape)
-                                    .testTag("preview_invoice_icon_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.ReceiptLong,
-                                    contentDescription = "View Invoice / Sale Bill",
-                                    tint = PinkPrimary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
                         }
-                    }
-
-                    if (showInvoiceDialog) {
-                        InvoiceDialog(
-                            order = order,
-                            onDismissRequest = { showInvoiceDialog = false }
-                        )
                     }
 
                     if (showGridPopup) {
@@ -371,6 +346,35 @@ fun OrdersScreen(
                                 viewModel.sendKot()
                             },
                             onDismissRequest = { showGridPopup = false }
+                        )
+                    }
+
+                    val editMenuItem = uiState.editMenuItem
+                    val editItem = uiState.editItem
+                    if (editMenuItem != null && editItem != null && !uiState.isEditLoading) {
+                        CustomizationBottomSheet(
+                            item = editMenuItem,
+                            customization = uiState.editCustomization,
+                            isEditMode = true,
+                            initialQuantity = editItem.quantity,
+                            initialSpice = editItem.spiceLevel,
+                            initialMeat = editItem.meatWellness,
+                            initialAllergies = editItem.allergies.orEmpty(),
+                            initialAddOns = editItem.addOns.orEmpty(),
+                            initialToppings = editItem.toppings.orEmpty(),
+                            initialNoOnion = editItem.onionFlag == true,
+                            initialNoGarlic = editItem.garlicFlag == true,
+                            initialSpecialInstructions = editItem.specialInstructions,
+                            onDismiss = { viewModel.closeEditItem() },
+                            onAddCustomAllergy = { name, onResult ->
+                                viewModel.addCustomAllergyForEdit(name, onResult)
+                            },
+                            onConfirmAdd = { qty, spice, meat, allergies, addOns, toppings, noOnion, noGarlic, instructions ->
+                                viewModel.saveEditItem(
+                                    qty, spice, meat, allergies, addOns, toppings,
+                                    noOnion, noGarlic, instructions
+                                )
+                            }
                         )
                     }
 
@@ -435,9 +439,8 @@ fun OrdersScreen(
                                 onQtyChange = { itemId, newQty ->
                                     viewModel.updateItemQty(itemId, newQty)
                                 },
-                                onItemClick = {
-                                    gridPopupInitialGuest = guest.guestId
-                                    showGridPopup = true
+                                onItemClick = { item ->
+                                    viewModel.openEditItem(item)
                                 }
                             )
                         }
@@ -486,7 +489,7 @@ fun GuestAccordionCard(
     guest: GuestOrder,
     onAddItemsClick: () -> Unit,
     onQtyChange: (itemId: String, newQty: Int) -> Unit,
-    onItemClick: () -> Unit
+    onItemClick: (OrderItem) -> Unit
 ) {
     var expanded by remember { mutableStateOf(true) }
     val isCommonGuest = guest.guestId == 0
@@ -581,7 +584,7 @@ fun GuestAccordionCard(
                             OrderItemCard(
                                 item = item,
                                 onQtyChange = { newQty -> onQtyChange(item.id, newQty) },
-                                onItemClick = onItemClick
+                                onItemClick = { onItemClick(item) }
                             )
                         }
                     }

@@ -1,9 +1,24 @@
-package com.example.ui.screens.menu
+﻿package com.example.ui.screens.menu
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -25,13 +40,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.example.data.model.CustomizationOption
 import com.example.data.model.MenuItem
 import com.example.data.model.ProductCustomization
 import com.example.ui.theme.*
@@ -123,7 +141,6 @@ fun MenuScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Filter row: Veg (green border) | Non-veg (red border) | Clear All
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -135,14 +152,12 @@ fun MenuScreen(
                     isSelected = uiState.selectedMealType == "veg",
                     onClick = { viewModel.setMealType("veg") }
                 )
-
                 FilterPill(
                     label = "Non-Veg",
                     borderColor = RedVegNonVeg,
                     isSelected = uiState.selectedMealType == "non-veg",
                     onClick = { viewModel.setMealType("non-veg") }
                 )
-
                 if (uiState.selectedMealType != "all" || uiState.selectedCategory != null || uiState.searchQuery.isNotEmpty()) {
                     TextButton(onClick = {
                         viewModel.setSearchQuery("")
@@ -156,7 +171,6 @@ fun MenuScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Horizontal category chips: "All Items" + categories (Active: #333 fill, white text)
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth().testTag("category_chips_row")
@@ -169,7 +183,6 @@ fun MenuScreen(
                         onClick = { viewModel.selectCategory(null) }
                     )
                 }
-
                 items(uiState.categories) { cat ->
                     val isSelected = uiState.selectedCategory == cat.id
                     CategoryChip(
@@ -182,7 +195,6 @@ fun MenuScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Vertical list of menu cards
             if (uiState.isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = PinkPrimary)
@@ -215,6 +227,9 @@ fun MenuScreen(
             item = item,
             customization = uiState.customizationData,
             onDismiss = { viewModel.closeCustomizationSheet() },
+            onAddCustomAllergy = { name, onResult ->
+                viewModel.addCustomAllergy(name, onResult)
+            },
             onConfirmAdd = { qty, spice, meat, allergies, addOns, toppings, noOnion, noGarlic, instructions ->
                 viewModel.addItemToOrder(item, qty, spice, meat, allergies, addOns, toppings, noOnion, noGarlic, instructions)
             }
@@ -317,7 +332,6 @@ fun MenuItemCard(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // [veg box + name + price]
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val isVeg = item.vegType?.lowercase() == "veg"
@@ -363,10 +377,10 @@ fun MenuItemCard(
                 )
                 if (item.stockWarning == true) {
                     Text(
-                        text = "Low/Zero stock",
+                        text = if (item.inStock == false) "Out of stock" else "Low/Zero stock",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFFD97706)
+                        color = if (item.inStock == false) Color(0xFFC62828) else Color(0xFFD97706)
                     )
                 } else if (!item.station.isNullOrBlank()) {
                     Text(
@@ -379,11 +393,15 @@ fun MenuItemCard(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // ADD: outline pink #E91E63, uppercase
+            // ADD: outline pink #E91E63, uppercase — blocked when strict stock + out of stock
             OutlinedButton(
                 onClick = onAddClick,
+                enabled = item.inStock != false,
                 colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White),
-                border = androidx.compose.foundation.BorderStroke(1.5.dp, PinkAccent),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.5.dp,
+                    if (item.inStock == false) Color.Gray else PinkAccent
+                ),
                 shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
                 modifier = Modifier.testTag("add_item_button_${item.id}")
@@ -392,18 +410,31 @@ fun MenuItemCard(
                     text = "ADD",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = PinkAccent
+                    color = if (item.inStock == false) Color.Gray else PinkAccent
                 )
             }
         }
     }
 }
 
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CustomizationBottomSheet(
     item: MenuItem,
     customization: ProductCustomization?,
     onDismiss: () -> Unit,
+    isEditMode: Boolean = false,
+    initialQuantity: Int = 1,
+    initialSpice: String? = null,
+    initialMeat: String? = null,
+    initialAllergies: List<String> = emptyList(),
+    initialAddOns: List<String> = emptyList(),
+    initialToppings: List<String> = emptyList(),
+    initialNoOnion: Boolean = false,
+    initialNoGarlic: Boolean = false,
+    initialSpecialInstructions: String? = null,
+    onAddCustomAllergy: (name: String, onResult: (Result<CustomizationOption>) -> Unit) -> Unit = { _, _ -> },
     onConfirmAdd: (
         qty: Int,
         spice: String?,
@@ -416,25 +447,86 @@ fun CustomizationBottomSheet(
         specialInstructions: String?
     ) -> Unit
 ) {
-    var quantity by remember { mutableStateOf(1) }
-    var selectedSpice by remember { mutableStateOf<String?>(customization?.spiceLevels?.firstOrNull()) }
-    var selectedMeat by remember { mutableStateOf<String?>(customization?.meatWellness?.firstOrNull()) }
+    // Lists from API product_customizations — sections only when data exists
+    val toppingsList = customization?.toppings.orEmpty()
+    val addOnsList = customization?.addOns.orEmpty()
+    val allergiesFromApi = customization?.allergies.orEmpty()
+    val spices = customization?.spiceLevels.orEmpty()
+    val isVegItem = !item.vegType.equals("non-veg", ignoreCase = true)
+    // Meat wellness only for non-veg (API also returns [] for veg)
+    val meatOptions = if (isVegItem) emptyList() else customization?.meatWellness.orEmpty()
+
+    var quantity by remember(isEditMode, initialQuantity) {
+        mutableStateOf(if (isEditMode) initialQuantity.coerceAtLeast(1) else 1)
+    }
+    var selectedSpice by remember(spices, isEditMode, initialSpice) {
+        mutableStateOf(
+            if (isEditMode) {
+                initialSpice?.takeIf { it.isNotBlank() }
+                    ?: spices.firstOrNull { it.equals(initialSpice, ignoreCase = true) }
+                    ?: spices.firstOrNull()
+            } else spices.firstOrNull()
+        )
+    }
+    var selectedMeat by remember(meatOptions, isEditMode, initialMeat) {
+        mutableStateOf(
+            if (isEditMode) {
+                initialMeat?.takeIf { it.isNotBlank() }
+                    ?: meatOptions.firstOrNull { it.equals(initialMeat, ignoreCase = true) }
+                    ?: meatOptions.firstOrNull()
+            } else meatOptions.firstOrNull()
+        )
+    }
     val selectedAllergies = remember { mutableStateListOf<String>() }
     val selectedAddOns = remember { mutableStateListOf<String>() }
     val selectedToppings = remember { mutableStateListOf<String>() }
-    var noOnion by remember { mutableStateOf(false) }
-    var noGarlic by remember { mutableStateOf(false) }
-    var specialInstructions by remember { mutableStateOf("") }
+    var noOnion by remember(isEditMode, initialNoOnion) { mutableStateOf(if (isEditMode) initialNoOnion else false) }
+    var noGarlic by remember(isEditMode, initialNoGarlic) { mutableStateOf(if (isEditMode) initialNoGarlic else false) }
+    var specialInstructions by remember(isEditMode, initialSpecialInstructions) {
+        mutableStateOf(if (isEditMode) initialSpecialInstructions.orEmpty() else "")
+    }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {},
-        dismissButton = {},
-        text = {
+    // Prefill selections when editing an existing order item
+    LaunchedEffect(isEditMode, initialAllergies, initialAddOns, initialToppings) {
+        if (isEditMode) {
+            selectedAllergies.clear()
+            selectedAllergies.addAll(initialAllergies)
+            selectedAddOns.clear()
+            selectedAddOns.addAll(initialAddOns)
+            selectedToppings.clear()
+            selectedToppings.addAll(initialToppings)
+        }
+    }
+
+    // Local allergy chips (API + newly added custom)
+    val allergiesList = remember { mutableStateListOf<CustomizationOption>() }
+    LaunchedEffect(allergiesFromApi) {
+        allergiesList.clear()
+        allergiesList.addAll(allergiesFromApi)
+    }
+
+    var showAddAllergyDialog by remember { mutableStateOf(false) }
+    var newAllergyName by remember { mutableStateOf("") }
+    var allergyError by remember { mutableStateOf<String?>(null) }
+    var allergySaving by remember { mutableStateOf(false) }
+
+    val maxDialogHeight = (LocalConfiguration.current.screenHeightDp * 0.85f).dp
+    val scrollMaxHeight = (LocalConfiguration.current.screenHeightDp * 0.55f).dp
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = Color.White,
+            shadowElevation = 8.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .wrapContentHeight()
+                .heightIn(max = maxDialogHeight)
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -442,114 +534,187 @@ fun CustomizationBottomSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Customize ${item.name}",
+                        text = if (isEditMode) "Edit ${item.name}" else "Customize ${item.name}",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextDark
+                        color = TextDark,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, contentDescription = "Close")
                     }
                 }
 
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                // 1. Toppings checklist chips
-                val toppingsList = customization?.toppings ?: emptyList()
-                if (toppingsList.isNotEmpty()) {
-                    Text("Toppings:", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextDark)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        toppingsList.forEach { top ->
-                            val isChecked = selectedToppings.contains(top.name)
-                            CustomSelectableChip(
-                                label = "${top.name} (+${CurrencyConfig.format(top.price)})",
-                                isSelected = isChecked,
-                                onClick = {
-                                    if (isChecked) selectedToppings.remove(top.name) else selectedToppings.add(top.name)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = scrollMaxHeight)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (toppingsList.isNotEmpty()) {
+                        CustomizationSection(title = "Toppings") {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                toppingsList.forEach { top ->
+                                    val isChecked = selectedToppings.any {
+                                        it.equals(top.name, ignoreCase = true) || it == top.id
+                                    }
+                                    CustomSelectableChip(
+                                        label = "${top.name} (+${CurrencyConfig.format(top.price)})",
+                                        isSelected = isChecked,
+                                        onClick = {
+                                            if (isChecked) {
+                                                selectedToppings.removeAll {
+                                                    it.equals(top.name, ignoreCase = true) || it == top.id
+                                                }
+                                            } else selectedToppings.add(top.name)
+                                        }
+                                    )
                                 }
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
-                }
-
-                // 2. Add-ons checklist chips
-                val addOnsList = customization?.addOns ?: emptyList()
-                if (addOnsList.isNotEmpty()) {
-                    Text("Add-ons:", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextDark)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        addOnsList.forEach { addOn ->
-                            val isChecked = selectedAddOns.contains(addOn.name)
-                            CustomSelectableChip(
-                                label = "${addOn.name} (+${CurrencyConfig.format(addOn.price)})",
-                                isSelected = isChecked,
-                                onClick = {
-                                    if (isChecked) selectedAddOns.remove(addOn.name) else selectedAddOns.add(addOn.name)
-                                }
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
-                }
-
-                // 3. Cooking options: Spice Levels
-                val spices = customization?.spiceLevels ?: listOf("Mild", "Medium", "Hot")
-                Text("Spice Level:", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextDark)
-                Spacer(modifier = Modifier.height(4.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    spices.forEach { sp ->
-                        val isSelected = selectedSpice == sp
-                        CustomSelectableChip(
-                            label = sp,
-                            isSelected = isSelected,
-                            onClick = { selectedSpice = sp }
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Allergies chips & No Onion/No Garlic
-                Text("Dietary & Allergies:", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextDark)
-                Spacer(modifier = Modifier.height(4.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    CustomSelectableChip(
-                        label = "No Onion",
-                        isSelected = noOnion,
-                        onClick = { noOnion = !noOnion }
-                    )
-                    CustomSelectableChip(
-                        label = "No Garlic",
-                        isSelected = noGarlic,
-                        onClick = { noGarlic = !noGarlic }
-                    )
-                    val allergiesList = customization?.allergies ?: emptyList()
-                    allergiesList.forEach { alg ->
-                        val isChecked = selectedAllergies.contains(alg.name)
-                        CustomSelectableChip(
-                            label = alg.name,
-                            isSelected = isChecked,
-                            onClick = {
-                                if (isChecked) selectedAllergies.remove(alg.name) else selectedAllergies.add(alg.name)
                             }
-                        )
+                        }
                     }
+
+                    if (addOnsList.isNotEmpty()) {
+                        CustomizationSection(title = "Add-ons") {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                addOnsList.forEach { addOn ->
+                                    val isChecked = selectedAddOns.any {
+                                        it.equals(addOn.name, ignoreCase = true) || it == addOn.id
+                                    }
+                                    CustomSelectableChip(
+                                        label = "${addOn.name} (+${CurrencyConfig.format(addOn.price)})",
+                                        isSelected = isChecked,
+                                        onClick = {
+                                            if (isChecked) {
+                                                selectedAddOns.removeAll {
+                                                    it.equals(addOn.name, ignoreCase = true) || it == addOn.id
+                                                }
+                                            } else selectedAddOns.add(addOn.name)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (spices.isNotEmpty()) {
+                        CustomizationSection(title = "Spice Level") {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                spices.forEach { sp ->
+                                    CustomSelectableChip(
+                                        label = sp,
+                                        isSelected = selectedSpice == sp,
+                                        onClick = { selectedSpice = sp }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (meatOptions.isNotEmpty()) {
+                        CustomizationSection(title = "Meat Wellness") {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                meatOptions.forEach { mw ->
+                                    CustomSelectableChip(
+                                        label = mw,
+                                        isSelected = selectedMeat == mw,
+                                        onClick = { selectedMeat = mw }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                "Dietary & Allergies",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = TextDark
+                            )
+                            // + adds custom allergy to DB master + selects it
+                            IconButton(
+                                onClick = {
+                                    newAllergyName = ""
+                                    allergyError = null
+                                    showAddAllergyDialog = true
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = "Add custom allergy",
+                                    tint = PinkPrimary
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            CustomSelectableChip(
+                                label = "No Onion",
+                                isSelected = noOnion,
+                                onClick = { noOnion = !noOnion }
+                            )
+                            CustomSelectableChip(
+                                label = "No Garlic",
+                                isSelected = noGarlic,
+                                onClick = { noGarlic = !noGarlic }
+                            )
+                            allergiesList.forEach { alg ->
+                                val isChecked = selectedAllergies.any {
+                                    it.equals(alg.name, ignoreCase = true) || it == alg.id
+                                }
+                                CustomSelectableChip(
+                                    label = alg.name,
+                                    isSelected = isChecked,
+                                    onClick = {
+                                        if (isChecked) {
+                                            selectedAllergies.removeAll {
+                                                it.equals(alg.name, ignoreCase = true) || it == alg.id
+                                            }
+                                        } else selectedAllergies.add(alg.name)
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = specialInstructions,
+                        onValueChange = { specialInstructions = it },
+                        label = { Text("Special Instructions") },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 3
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                OutlinedTextField(
-                    value = specialInstructions,
-                    onValueChange = { specialInstructions = it },
-                    label = { Text("Special Instructions") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Footer: qty stepper + pink "Add to Order"
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -561,7 +726,10 @@ fun CustomizationBottomSheet(
                             .background(PinkLightBg, RoundedCornerShape(8.dp))
                             .padding(horizontal = 6.dp, vertical = 4.dp)
                     ) {
-                        IconButton(onClick = { if (quantity > 1) quantity-- }, modifier = Modifier.size(30.dp)) {
+                        IconButton(
+                            onClick = { if (quantity > 1) quantity-- },
+                            modifier = Modifier.size(30.dp)
+                        ) {
                             Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = PinkPrimary)
                         }
                         Text(
@@ -571,7 +739,10 @@ fun CustomizationBottomSheet(
                             color = PinkPrimary,
                             modifier = Modifier.padding(horizontal = 8.dp)
                         )
-                        IconButton(onClick = { quantity++ }, modifier = Modifier.size(30.dp)) {
+                        IconButton(
+                            onClick = { quantity++ },
+                            modifier = Modifier.size(30.dp)
+                        ) {
                             Icon(Icons.Default.Add, contentDescription = "Increase", tint = PinkPrimary)
                         }
                     }
@@ -581,7 +752,7 @@ fun CustomizationBottomSheet(
                             onConfirmAdd(
                                 quantity,
                                 selectedSpice,
-                                selectedMeat,
+                                if (isVegItem) null else selectedMeat,
                                 selectedAllergies.toList(),
                                 selectedAddOns.toList(),
                                 selectedToppings.toList(),
@@ -593,13 +764,99 @@ fun CustomizationBottomSheet(
                         colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("Add to Order", fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(
+                            if (isEditMode) "Save Changes" else "Add to Order",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
                     }
                 }
             }
-        },
-        containerColor = Color.White
-    )
+        }
+    }
+
+    if (showAddAllergyDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!allergySaving) showAddAllergyDialog = false
+            },
+            title = { Text("Add custom allergy", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = newAllergyName,
+                        onValueChange = {
+                            newAllergyName = it
+                            allergyError = null
+                        },
+                        label = { Text("Allergy name") },
+                        singleLine = true,
+                        enabled = !allergySaving,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (!allergyError.isNullOrBlank()) {
+                        Text(
+                            text = allergyError!!,
+                            color = Color(0xFFC62828),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = newAllergyName.trim()
+                        if (trimmed.isEmpty()) {
+                            allergyError = "Enter allergy name"
+                            return@Button
+                        }
+                        allergySaving = true
+                        onAddCustomAllergy(trimmed) { result ->
+                            allergySaving = false
+                            result.onSuccess { option ->
+                                if (allergiesList.none { it.name.equals(option.name, ignoreCase = true) }) {
+                                    allergiesList.add(option)
+                                }
+                                if (!selectedAllergies.any { it.equals(option.name, ignoreCase = true) }) {
+                                    selectedAllergies.add(option.name)
+                                }
+                                showAddAllergyDialog = false
+                                newAllergyName = ""
+                            }.onFailure { e ->
+                                allergyError = e.message ?: "Could not save allergy"
+                            }
+                        }
+                    },
+                    enabled = !allergySaving,
+                    colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary)
+                ) {
+                    Text(if (allergySaving) "Saving…" else "Add", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showAddAllergyDialog = false },
+                    enabled = !allergySaving
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun CustomizationSection(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextDark)
+        Spacer(modifier = Modifier.height(4.dp))
+        content()
+    }
 }
 
 @Composable
@@ -618,7 +875,7 @@ fun CustomSelectableChip(
         )
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isSelected) {
@@ -637,19 +894,6 @@ fun CustomSelectableChip(
                 color = if (isSelected) PinkPrimary else TextDark
             )
         }
-    }
-}
-
-@Composable
-fun FlowRow(
-    horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
-    content: @Composable () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = horizontalArrangement
-    ) {
-        content()
     }
 }
 
