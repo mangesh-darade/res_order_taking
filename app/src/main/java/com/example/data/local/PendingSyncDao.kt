@@ -21,6 +21,15 @@ interface PendingSyncDao {
     @Delete
     suspend fun deletePendingAction(entity: PendingSyncEntity)
 
+    @Update
+    suspend fun updatePendingAction(entity: PendingSyncEntity)
+
+    @Query("SELECT * FROM pending_sync_queue WHERE orderId = :orderId ORDER BY id ASC")
+    suspend fun getPendingByOrderId(orderId: String): List<PendingSyncEntity>
+
+    @Query("UPDATE pending_sync_queue SET orderId = :newOrderId WHERE orderId = :oldOrderId")
+    suspend fun remapOrderId(oldOrderId: String, newOrderId: String)
+
     @Query("DELETE FROM pending_sync_queue WHERE id = :id")
     suspend fun deleteById(id: Long)
 

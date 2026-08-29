@@ -6,6 +6,7 @@ import com.example.data.local.AppDatabase
 import com.example.data.local.PendingSyncDao
 import com.example.data.local.PendingSyncEntity
 import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,8 +20,15 @@ class SyncManager private constructor(context: Context) {
     private val networkMonitor = NetworkMonitor(context)
     private val api get() = ApiClient.service
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
+    private val mapType = Types.newParameterizedType(Map::class.java, String::class.java, Any::class.java)
+    private val mapAdapter = moshi.adapter<Map<String, Any?>>(mapType)
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    /** localOrderId → serverOrderId */
+    private val orderIdMap = mutableMapOf<String, String>()
+    /** localItemId → serverItemId */
+    private val itemIdMap = mutableMapOf<String, String>()
 
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
@@ -42,10 +50,11 @@ class SyncManager private constructor(context: Context) {
     suspend fun enqueueAction(orderId: String?, actionType: String, payloadMap: Map<String, Any?>) {
         withContext(Dispatchers.IO) {
             try {
-                val adapter = moshi.adapter(Map::class.java)
-                val json = adapter.toJson(payloadMap)
+                val resolvedOrderId = resolveOrderId(orderId ?: "")
+                val resolvedPayload = remapPayloadIds(payloadMap)
+                val json = mapAdapter.toJson(resolvedPayload)
                 val entity = PendingSyncEntity(
-                    orderId = orderId ?: "",
+                    orderId = resolvedOrderId,
                     actionType = actionType,
                     payloadJson = json
                 )
@@ -54,6 +63,17 @@ class SyncManager private constructor(context: Context) {
                 e.printStackTrace()
             }
         }
+    }
+
+    fun mapOrderId(localId: String, serverId: String) {
+        if (localId.isNotBlank() && serverId.isNotBlank() && localId != serverId) {
+            orderIdMap[localId] = serverId
+        }
+    }
+
+    fun resolveOrderId(id: String): String {
+        if (id.isBlank()) return id
+        return orderIdMap[id] ?: id
     }
 
     suspend fun clearPendingQueue() {
@@ -73,7 +93,6 @@ class SyncManager private constructor(context: Context) {
                     if (success) {
                         dao.deletePendingAction(item)
                     } else {
-                        // Stop sequential execution on first error to preserve order sequence
                         break
                     }
                 }
@@ -85,64 +104,111 @@ class SyncManager private constructor(context: Context) {
         }
     }
 
+    private fun remapPayloadIds(payload: Map<String, Any?>): Map<String, Any?> {
+        val out = payload.toMutableMap()
+        (out["orderId"] as? String)?.let { out["orderId"] = resolveOrderId(it) }
+        (out["itemId"] as? String)?.let { local ->
+            out["itemId"] = itemIdMap[local] ?: local
+        }
+        return out
+    }
+
+    private suspend fun rewriteQueuedOrderIds(oldOrderId: String, newOrderId: String) {
+        if (oldOrderId.isBlank() || newOrderId.isBlank() || oldOrderId == newOrderId) return
+        orderIdMap[oldOrderId] = newOrderId
+        val queued = dao.getPendingByOrderId(oldOrderId)
+        for (row in queued) {
+            val payload = try {
+                @Suppress("UNCHECKED_CAST")
+                (mapAdapter.fromJson(row.payloadJson) as? Map<String, Any?>)?.toMutableMap()
+                    ?: mutableMapOf()
+            } catch (_: Exception) {
+                mutableMapOf()
+            }
+            payload["orderId"] = newOrderId
+            val updated = row.copy(
+                orderId = newOrderId,
+                payloadJson = mapAdapter.toJson(payload)
+            )
+            dao.updatePendingAction(updated)
+        }
+        dao.remapOrderId(oldOrderId, newOrderId)
+    }
+
     private suspend fun processItem(item: PendingSyncEntity): Boolean {
         return try {
-            val mapAdapter = moshi.adapter(Map::class.java)
             @Suppress("UNCHECKED_CAST")
-            val payload = mapAdapter.fromJson(item.payloadJson) as? Map<String, Any?> ?: return true
+            val payload = remapPayloadIds(
+                (mapAdapter.fromJson(item.payloadJson) as? Map<String, Any?>) ?: return true
+            )
 
             when (item.actionType) {
                 "CREATE_ORDER" -> {
                     val tableId = payload["tableId"] as? String ?: return true
                     val guestCount = (payload["guestCount"] as? Number)?.toInt() ?: 1
+                    val localOrderId = (payload["localOrderId"] as? String)
+                        ?: item.orderId
                     val res = api.createOrder(tableId, guestCount)
-                    res.isSuccessful && res.body()?.response?.status == "SUCCESS"
+                    val ok = res.isSuccessful && res.body()?.response?.status == "SUCCESS"
+                    if (ok) {
+                        val serverId = res.body()?.data?.orderId
+                        if (!serverId.isNullOrBlank()) {
+                            rewriteQueuedOrderIds(localOrderId, serverId)
+                        }
+                    }
+                    ok
                 }
                 "ADD_ITEM" -> {
-                    val orderId = payload["orderId"] as? String ?: return true
+                    val orderId = resolveOrderId(payload["orderId"] as? String ?: return true)
                     val guestId = (payload["guestId"] as? Number)?.toInt() ?: 0
                     val productId = payload["productId"] as? String ?: return true
                     val quantity = (payload["quantity"] as? Number)?.toInt() ?: 1
-                    val spiceLevel = payload["spiceLevel"] as? String
-                    val meatWellness = payload["meatWellness"] as? String
-                    val allergies = payload["allergies"] as? String
-                    val customAllergies = payload["customAllergies"] as? String
-                    val addOns = payload["addOns"] as? String
-                    val toppings = payload["toppings"] as? String
-                    val onionFlag = (payload["onionFlag"] as? Number)?.toInt() ?: 0
-                    val garlicFlag = (payload["garlicFlag"] as? Number)?.toInt() ?: 0
-                    val specialInstructions = payload["specialInstructions"] as? String
-
+                    val localItemId = payload["localItemId"] as? String
                     val res = api.addItem(
                         orderId = orderId,
                         guestId = guestId,
                         productId = productId,
                         quantity = quantity,
-                        spiceLevel = spiceLevel,
-                        meatWellness = meatWellness,
-                        allergies = allergies,
-                        customAllergies = customAllergies,
-                        addOns = addOns,
-                        toppings = toppings,
-                        onionFlag = onionFlag,
-                        garlicFlag = garlicFlag,
-                        specialInstructions = specialInstructions
+                        spiceLevel = payload["spiceLevel"] as? String,
+                        meatWellness = payload["meatWellness"] as? String,
+                        allergies = payload["allergies"] as? String,
+                        customAllergies = payload["customAllergies"] as? String,
+                        addOns = payload["addOns"] as? String,
+                        toppings = payload["toppings"] as? String,
+                        onionFlag = (payload["onionFlag"] as? Number)?.toInt() ?: 0,
+                        garlicFlag = (payload["garlicFlag"] as? Number)?.toInt() ?: 0,
+                        specialInstructions = payload["specialInstructions"] as? String
                     )
-                    res.isSuccessful && res.body()?.response?.status == "SUCCESS"
+                    val ok = res.isSuccessful && res.body()?.response?.status == "SUCCESS"
+                    if (ok && !localItemId.isNullOrBlank()) {
+                        val serverItem = res.body()?.data?.guests
+                            ?.flatMap { it.items }
+                            ?.lastOrNull { it.productId == productId }
+                        if (serverItem != null && serverItem.id.isNotBlank()) {
+                            itemIdMap[localItemId] = serverItem.id
+                        }
+                        val serverOrderId = res.body()?.data?.orderId
+                        if (!serverOrderId.isNullOrBlank() && serverOrderId != orderId) {
+                            rewriteQueuedOrderIds(orderId, serverOrderId)
+                        }
+                    }
+                    ok
                 }
                 "UPDATE_QTY" -> {
-                    val itemId = payload["itemId"] as? String ?: return true
+                    val itemId = itemIdMap[payload["itemId"] as? String]
+                        ?: (payload["itemId"] as? String)
+                        ?: return true
                     val newQty = (payload["newQty"] as? Number)?.toInt() ?: 1
                     val res = if (newQty <= 0) api.deleteItem(itemId) else api.updateItem(itemId, newQty)
                     res.isSuccessful && res.body()?.response?.status == "SUCCESS"
                 }
                 "SEND_KOT" -> {
-                    val orderId = payload["orderId"] as? String ?: return true
+                    val orderId = resolveOrderId(payload["orderId"] as? String ?: return true)
                     val res = api.updateKotStatus(orderId)
                     res.isSuccessful && res.body()?.response?.status == "SUCCESS"
                 }
                 "FINALIZE_ORDER" -> {
-                    val orderId = payload["orderId"] as? String ?: return true
+                    val orderId = resolveOrderId(payload["orderId"] as? String ?: return true)
                     val res = api.finalizeOrder(orderId)
                     res.isSuccessful && res.body()?.response?.status == "SUCCESS"
                 }

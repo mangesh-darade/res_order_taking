@@ -108,7 +108,11 @@ data class MenuItem(
     @Json(name = "price") val price: Double = 0.0,
     @Json(name = "veg_type") val vegType: String? = "veg", // "veg", "non-veg"
     @Json(name = "image_url") val imageUrl: String? = null,
-    @Json(name = "description") val description: String? = null
+    @Json(name = "description") val description: String? = null,
+    @Json(name = "stock_qty") val stockQty: Double? = null,
+    @Json(name = "in_stock") val inStock: Boolean? = true,
+    @Json(name = "stock_warning") val stockWarning: Boolean? = false,
+    @Json(name = "station") val station: String? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -173,5 +177,14 @@ data class LoginUser(
 data class RegisterInfo(
     @Json(name = "info_message") val infoMessage: String? = "Staff & Captain accounts are created by the Restaurant Admin.",
     @Json(name = "contact_admin") val contactAdmin: String? = "Please contact your POS Admin/Manager to get login credentials."
+)
+
+@JsonClass(generateAdapter = true)
+data class TableMoveResponse(
+    @Json(name = "message") val message: String? = null,
+    @Json(name = "order_id") val orderId: String? = null,
+    @Json(name = "from_table_id") val fromTableId: String? = null,
+    @Json(name = "to_table_id") val toTableId: String? = null,
+    @Json(name = "order") val order: OrderBootstrap? = null
 )
 

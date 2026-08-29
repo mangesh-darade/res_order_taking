@@ -146,6 +146,20 @@ interface RestaurantApiService {
     ): Response<ApiResponse<Map<String, String>>>
 
     @FormUrlEncoded
+    @POST("transfer_table")
+    suspend fun transferTable(
+        @Field("from_table_id") fromTableId: String,
+        @Field("to_table_id") toTableId: String
+    ): Response<ApiResponse<TableMoveResponse>>
+
+    @FormUrlEncoded
+    @POST("merge_tables")
+    suspend fun mergeTables(
+        @Field("from_table_id") fromTableId: String,
+        @Field("to_table_id") toTableId: String
+    ): Response<ApiResponse<TableMoveResponse>>
+
+    @FormUrlEncoded
     @POST("free_table")
     suspend fun freeTable(
         @Field("table_id") tableId: String
@@ -154,6 +168,12 @@ interface RestaurantApiService {
     @FormUrlEncoded
     @POST("mark_occupied")
     suspend fun markOccupied(
+        @Field("table_id") tableId: String
+    ): Response<ApiResponse<Map<String, String>>>
+
+    @FormUrlEncoded
+    @POST("mark_available")
+    suspend fun markAvailable(
         @Field("table_id") tableId: String
     ): Response<ApiResponse<Map<String, String>>>
 
