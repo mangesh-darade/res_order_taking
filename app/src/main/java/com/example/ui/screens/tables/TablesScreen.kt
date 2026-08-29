@@ -143,17 +143,21 @@ fun TablesScreen(
                             TableCard(
                                 table = table,
                                 onClick = {
-                                    if (table.status.lowercase() == "reserved") {
-                                        viewModel.showReserveDialog(table)
-                                    } else {
-                                        onNavigateToOrders(table.id)
+                                    when {
+                                        uiState.pickTargetMode != null -> viewModel.onTablePickedAsTarget(table)
+                                        table.status.lowercase() == "reserved" -> viewModel.showReserveDialog(table)
+                                        else -> onNavigateToOrders(table.id)
                                     }
                                 },
                                 onLongClick = {
+                                    // free → Mark Available / Reserve
+                                    // available|reserved → reserve dialog
+                                    // active (occupied+) → transfer / merge / free
                                     when (table.status.lowercase()) {
-                                        "available", "free" -> viewModel.showReserveDialog(table)
+                                        "free" -> viewModel.showFreeActionsDialog(table)
+                                        "available" -> viewModel.showReserveDialog(table)
                                         "reserved" -> viewModel.showReserveDialog(table)
-                                        else -> viewModel.showFreeConfirmDialog(table)
+                                        else -> viewModel.showOpsDialog(table)
                                     }
                                 },
                                 onFreeClick = { viewModel.showFreeConfirmDialog(table) }
@@ -175,71 +179,55 @@ fun TablesScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val availableCount = uiState.tables.count {
-                        it.status.lowercase() == "available" || it.status.lowercase() == "free"
-                    }
-                    val occupiedCount = uiState.tables.count {
-                        it.status.lowercase() in listOf("occupied", "order-placed", "ready", "served")
-                    }
-                    val reservedCount = uiState.tables.count { it.status.lowercase() == "reserved" }
+                    val statuses = uiState.tables.map { it.status.lowercase() }
                     val totalCount = uiState.tables.size
+                    val availableCount = statuses.count { it == "available" }
+                    val occupiedCount = statuses.count { it == "occupied" }
+                    // Order Placed + Served share pink on cards — one legend chip
+                    val pinkCount = statuses.count {
+                        it in listOf("order-placed", "placed", "kitchen", "kot_sent", "served")
+                    }
+                    val readyCount = statuses.count { it == "ready" || it == "order-ready" }
+                    val reservedCount = statuses.count { it == "reserved" }
+                    val freeCount = statuses.count { it == "free" }
 
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.weight(1f, fill = false),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Surface(
-                                modifier = Modifier
-                                    .size(12.dp)
-                                    .border(1.dp, Color.LightGray, RoundedCornerShape(3.dp)),
-                                shape = RoundedCornerShape(3.dp),
-                                color = Color.White
-                            ) {}
-                            Text(
-                                text = "$availableCount/$totalCount",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextDark
-                            )
-                        }
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Surface(
-                                modifier = Modifier.size(12.dp),
-                                shape = RoundedCornerShape(3.dp),
-                                color = com.example.ui.theme.StatusOccupiedBg
-                            ) {}
-                            Text(
-                                text = "$occupiedCount/$totalCount",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextDark
-                            )
-                        }
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Surface(
-                                modifier = Modifier.size(12.dp),
-                                shape = RoundedCornerShape(3.dp),
-                                color = Color(0xFFFFFF99)
-                            ) {}
-                            Text(
-                                text = "$reservedCount/$totalCount",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextDark
-                            )
-                        }
+                        // Colors match TableCard: white / blue / pink / green / yellow / red
+                        StatusLegendChip(
+                            color = Color.White,
+                            count = availableCount,
+                            total = totalCount,
+                            bordered = true
+                        )
+                        StatusLegendChip(
+                            color = Color(0xFFA2E5FF),
+                            count = occupiedCount,
+                            total = totalCount
+                        )
+                        StatusLegendChip(
+                            color = Color(0xFFFF7EB6),
+                            count = pinkCount,
+                            total = totalCount
+                        )
+                        StatusLegendChip(
+                            color = Color(0xFFC8E6C9),
+                            count = readyCount,
+                            total = totalCount
+                        )
+                        StatusLegendChip(
+                            color = Color(0xFFFFFF99),
+                            count = reservedCount,
+                            total = totalCount
+                        )
+                        StatusLegendChip(
+                            color = Color(0xFFFFCDD2),
+                            count = freeCount,
+                            total = totalCount
+                        )
                     }
 
                     Button(
@@ -265,7 +253,7 @@ fun TablesScreen(
         AlertDialog(
             onDismissRequest = { viewModel.dismissConfirmDialog() },
             title = { Text(text = "Free Table ${table.tableNumber}?", fontWeight = FontWeight.Bold) },
-            text = { Text(text = "Are you sure you want to mark table ${table.tableNumber} as free/available?") },
+            text = { Text(text = "Are you sure you want to mark table ${table.tableNumber} as Free (red)? Open orders will be closed.") },
             confirmButton = {
                 Button(
                     onClick = { viewModel.freeTable(table.id) },
@@ -277,6 +265,98 @@ fun TablesScreen(
             dismissButton = {
                 OutlinedButton(onClick = { viewModel.dismissConfirmDialog() }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (uiState.opsDialogTable != null) {
+        val table = uiState.opsDialogTable!!
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissConfirmDialog() },
+            title = { Text(text = "Table ${table.tableNumber}", fontWeight = FontWeight.Bold) },
+            text = { Text(text = "Transfer moves the order. Merge combines bills into another table.") },
+            confirmButton = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { viewModel.beginTransfer(table) },
+                        colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary),
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Transfer") }
+                    Button(
+                        onClick = { viewModel.beginMerge(table) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Merge into…") }
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.dismissConfirmDialog()
+                            viewModel.showFreeConfirmDialog(table)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Free table") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissConfirmDialog() }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    if (uiState.freeActionsDialogTable != null) {
+        // Free (red) after cleaning → Mark Available (white) or Reserve
+        val table = uiState.freeActionsDialogTable!!
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissConfirmDialog() },
+            title = { Text(text = "Table ${table.tableNumber} (Free)", fontWeight = FontWeight.Bold) },
+            text = { Text(text = "Cleaning done? Mark Available to seat new guests.") },
+            confirmButton = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { viewModel.markAvailable(table.id) },
+                        colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary),
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Mark Available") }
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.dismissConfirmDialog()
+                            viewModel.showReserveDialog(table)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Reserve") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissConfirmDialog() }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    if (uiState.pickTargetMode != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelPickTarget() },
+            title = {
+                Text(
+                    text = if (uiState.pickTargetMode == "merge") "Pick merge target" else "Pick transfer target",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = if (uiState.pickTargetMode == "merge") {
+                        "Tap any other table on the floor to merge into it."
+                    } else {
+                        "Tap an empty/available table to move this order."
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.cancelPickTarget() }) {
+                    Text("Cancel pick")
                 }
             }
         )
@@ -561,6 +641,39 @@ private fun DetailRow(label: String, value: String) {
             text = value,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
+            color = TextDark
+        )
+    }
+}
+
+/**
+ * Footer status color chip — colors align with TableCard backgrounds.
+ */
+@Composable
+private fun StatusLegendChip(
+    color: Color,
+    count: Int,
+    total: Int,
+    bordered: Boolean = false
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Surface(
+            modifier = Modifier
+                .size(12.dp)
+                .then(
+                    if (bordered) Modifier.border(1.dp, Color.LightGray, RoundedCornerShape(3.dp))
+                    else Modifier
+                ),
+            shape = RoundedCornerShape(3.dp),
+            color = color
+        ) {}
+        Text(
+            text = "$count/$total",
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
             color = TextDark
         )
     }

@@ -21,6 +21,9 @@ data class TablesUiState(
     val tables: List<TableItem> = emptyList(),
     val confirmDialogTable: TableItem? = null,
     val reserveDialogTable: TableItem? = null,
+    val opsDialogTable: TableItem? = null,
+    val freeActionsDialogTable: TableItem? = null,
+    val pickTargetMode: String? = null, // "transfer" | "merge"
     val snackbarMessage: String? = null
 )
 
@@ -42,7 +45,12 @@ class TablesViewModel(
         autoRefreshJob = viewModelScope.launch {
             while (isActive) {
                 delay(3000)
-                loadTables(silent = true)
+                if (_uiState.value.pickTargetMode == null &&
+                    _uiState.value.opsDialogTable == null &&
+                    _uiState.value.freeActionsDialogTable == null
+                ) {
+                    loadTables(silent = true)
+                }
             }
         }
     }
@@ -79,15 +87,114 @@ class TablesViewModel(
     }
 
     fun showFreeConfirmDialog(table: TableItem) {
-        _uiState.value = _uiState.value.copy(confirmDialogTable = table)
+        _uiState.value = _uiState.value.copy(
+            confirmDialogTable = table,
+            opsDialogTable = null,
+            freeActionsDialogTable = null
+        )
+    }
+
+    fun showOpsDialog(table: TableItem) {
+        _uiState.value = _uiState.value.copy(opsDialogTable = table, pickTargetMode = null)
+    }
+
+    fun showFreeActionsDialog(table: TableItem) {
+        _uiState.value = _uiState.value.copy(freeActionsDialogTable = table)
     }
 
     fun dismissConfirmDialog() {
-        _uiState.value = _uiState.value.copy(confirmDialogTable = null, reserveDialogTable = null)
+        _uiState.value = _uiState.value.copy(
+            confirmDialogTable = null,
+            reserveDialogTable = null,
+            opsDialogTable = null,
+            freeActionsDialogTable = null,
+            pickTargetMode = null
+        )
     }
 
     fun showReserveDialog(table: TableItem) {
-        _uiState.value = _uiState.value.copy(reserveDialogTable = table)
+        _uiState.value = _uiState.value.copy(
+            reserveDialogTable = table,
+            freeActionsDialogTable = null
+        )
+    }
+
+    fun startPickTarget(mode: String) {
+        _uiState.value = _uiState.value.copy(pickTargetMode = mode, opsDialogTable = null)
+    }
+
+    fun onTablePickedAsTarget(target: TableItem) {
+        val mode = _uiState.value.pickTargetMode ?: return
+        val fromId = pendingSourceTableId ?: return
+        if (target.id == fromId) {
+            _uiState.value = _uiState.value.copy(snackbarMessage = "Pick a different table")
+            return
+        }
+        when (mode) {
+            "transfer" -> transferTable(fromId, target.id)
+            "merge" -> mergeTables(fromId, target.id)
+        }
+    }
+
+    private var pendingSourceTableId: String? = null
+
+    fun beginTransfer(from: TableItem) {
+        pendingSourceTableId = from.id
+        _uiState.value = _uiState.value.copy(
+            opsDialogTable = null,
+            pickTargetMode = "transfer",
+            snackbarMessage = "Select target table to transfer ${from.tableNumber}"
+        )
+    }
+
+    fun beginMerge(from: TableItem) {
+        pendingSourceTableId = from.id
+        _uiState.value = _uiState.value.copy(
+            opsDialogTable = null,
+            pickTargetMode = "merge",
+            snackbarMessage = "Select target table to merge ${from.tableNumber} into"
+        )
+    }
+
+    fun cancelPickTarget() {
+        pendingSourceTableId = null
+        _uiState.value = _uiState.value.copy(pickTargetMode = null)
+    }
+
+    fun transferTable(fromTableId: String, toTableId: String) {
+        viewModelScope.launch {
+            val result = repository.transferTable(fromTableId, toTableId)
+            result.onSuccess {
+                pendingSourceTableId = null
+                _uiState.value = _uiState.value.copy(
+                    pickTargetMode = null,
+                    snackbarMessage = it.message ?: "Table transferred"
+                )
+                loadTables(silent = true)
+            }.onFailure { e ->
+                _uiState.value = _uiState.value.copy(
+                    snackbarMessage = e.message ?: "Transfer failed"
+                )
+            }
+        }
+    }
+
+    fun mergeTables(fromTableId: String, toTableId: String) {
+        viewModelScope.launch {
+            val result = repository.mergeTables(fromTableId, toTableId)
+            result.onSuccess {
+                pendingSourceTableId = null
+                _uiState.value = _uiState.value.copy(
+                    pickTargetMode = null,
+                    snackbarMessage = it.message ?: "Tables merged"
+                )
+                loadTables(silent = true)
+            }.onFailure { e ->
+                _uiState.value = _uiState.value.copy(
+                    snackbarMessage = e.message ?: "Merge failed"
+                )
+            }
+        }
     }
 
     fun reserveTable(
@@ -144,6 +251,21 @@ class TablesViewModel(
             dismissConfirmDialog()
             _uiState.value = _uiState.value.copy(snackbarMessage = "Table freed successfully")
             loadTables(silent = true)
+        }
+    }
+
+    fun markAvailable(tableId: String) {
+        viewModelScope.launch {
+            val result = repository.markAvailable(tableId)
+            result.onSuccess {
+                dismissConfirmDialog()
+                _uiState.value = _uiState.value.copy(snackbarMessage = "Table marked available")
+                loadTables(silent = true)
+            }.onFailure { e ->
+                _uiState.value = _uiState.value.copy(
+                    snackbarMessage = e.message ?: "Failed to mark available"
+                )
+            }
         }
     }
 

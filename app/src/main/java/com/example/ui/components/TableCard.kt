@@ -1,21 +1,23 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -34,26 +36,29 @@ fun TableCard(
     modifier: Modifier = Modifier
 ) {
     val statusLower = table.status.lowercase()
+    val isOrderPlaced = statusLower in listOf("order-placed", "placed", "kitchen", "kot_sent")
+    val isReady = statusLower == "ready" || statusLower == "order-ready"
 
-    // Background color based on table status
-    val cardBg = when (statusLower) {
-        "occupied" -> Color(0xFFA2E5FF)
-        "order-placed", "placed", "kitchen", "kot_sent" -> Color(0xFFFFCC80)
-        "ready" -> Color(0xFFC8E6C9)
-        "served" -> Color(0xFFFF7EB6)
-        "reserved" -> Color(0xFFFFFF99) // Exact Yellow per specification for Reserved
-        "free" -> Color(0xFFFFCDD2)    // Exact Red tint for Free
-        else -> Color(0xFFF8FAFC)
+    // Spec colors: Available White, Reserved Yellow, Occupied Blue,
+    // Order Placed Pink, Order Ready Green, Served Pink, Free Red
+    val cardBg = when {
+        statusLower == "occupied" -> Color(0xFFA2E5FF)
+        isOrderPlaced -> Color(0xFFFF7EB6)
+        isReady -> Color(0xFFC8E6C9)
+        statusLower == "served" -> Color(0xFFFF7EB6)
+        statusLower == "reserved" -> Color(0xFFFFFF99)
+        statusLower == "free" -> Color(0xFFFFCDD2)
+        else -> Color(0xFFFFFFFF) // Available = White
     }
 
     val isAvailable = statusLower == "available"
 
     val tableTextColor = when {
         statusLower == "occupied" -> Color(0xFF0284C7)
-        statusLower in listOf("order-placed", "placed", "kitchen", "kot_sent") -> Color(0xFFD97706)
-        statusLower == "ready" -> Color(0xFF16A34A)
+        isOrderPlaced -> Color(0xFFBE185D)
+        isReady -> Color(0xFF16A34A)
         statusLower == "served" -> Color(0xFFBE185D)
-        statusLower == "reserved" -> Color(0xFF856404) // Dark Gold/Yellow text
+        statusLower == "reserved" -> Color(0xFF856404)
         statusLower == "free" -> Color(0xFFB71C1C)
         else -> PinkPrimary
     }
@@ -71,6 +76,19 @@ fun TableCard(
         else -> table.status.uppercase()
     }
     val cardShape = RoundedCornerShape(14.dp)
+
+    // Spec icons per status
+    val statusIcon: ImageVector? = when {
+        isAvailable -> null
+        statusLower == "reserved" -> Icons.Default.AccessTime // Clock
+        statusLower == "occupied" -> Icons.Default.Add // Plus (+ Guest)
+        isOrderPlaced -> Icons.Default.Add
+        isReady -> Icons.Default.Restaurant // Cloche / dish
+        statusLower == "served" -> Icons.Default.Add
+        statusLower == "free" -> Icons.Default.ReceiptLong // Bill
+        else -> null
+    }
+    val showGuest = !isAvailable && statusLower != "reserved"
 
     Card(
         modifier = modifier
@@ -97,7 +115,6 @@ fun TableCard(
                 .padding(8.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Header Row: Status Name & Guests Icon
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -118,27 +135,38 @@ fun TableCard(
                     )
                 }
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(end = 4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "Guests",
-                        tint = tableTextColor,
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(modifier = Modifier.width(2.dp))
-                    Text(
-                        text = (table.guestsCount ?: 0).toString(),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = tableTextColor
-                    )
+                if (statusIcon != null || showGuest) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        modifier = Modifier.padding(end = 2.dp)
+                    ) {
+                        if (statusIcon != null) {
+                            Icon(
+                                imageVector = statusIcon,
+                                contentDescription = null,
+                                tint = tableTextColor,
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
+                        if (showGuest) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = "Guests",
+                                tint = tableTextColor,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = (table.guestsCount ?: 0).toString(),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = tableTextColor
+                            )
+                        }
+                    }
                 }
             }
 
-            // Center Table Name Text Display
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
