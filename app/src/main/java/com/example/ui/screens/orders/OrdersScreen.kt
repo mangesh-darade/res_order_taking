@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -84,7 +85,11 @@ fun OrdersScreen(
         containerColor = BackgroundGray,
         bottomBar = {
             val order = uiState.order
-            val isReady = order?.status == "ready"
+            val allItems = order?.guests?.flatMap { it.items }.orEmpty()
+            val hasPending = allItems.any { it.status.equals("pending", ignoreCase = true) }
+            val hasReady = allItems.any { it.status.equals("ready", ignoreCase = true) }
+            val showServed = hasReady && !hasPending
+            val kotEnabled = !uiState.isSendingKot && hasPending
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -98,13 +103,15 @@ fun OrdersScreen(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Left Button: KOT (Pink) or Served (Green if Ready)
+                    // Left Button: KOT (pending) or Served (when ready items waiting)
                     Button(
                         onClick = {
-                            if (isReady) viewModel.markServed() else viewModel.sendKot()
+                            if (showServed) viewModel.markServed() else viewModel.sendKot()
                         },
+                        enabled = if (showServed) hasReady else kotEnabled,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isReady) GreenConfirm else PinkPrimary
+                            containerColor = if (showServed) GreenConfirm else PinkPrimary,
+                            disabledContainerColor = Color.Gray.copy(alpha = 0.4f)
                         ),
                         modifier = Modifier
                             .weight(1f)
@@ -114,7 +121,11 @@ fun OrdersScreen(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = if (isReady) "Served" else "KOT",
+                            text = when {
+                                uiState.isSendingKot -> "Sending…"
+                                showServed -> "Served"
+                                else -> "KOT"
+                            },
                             fontSize = 20.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.White
@@ -586,15 +597,27 @@ fun OrderItemCard(
     onQtyChange: (Int) -> Unit,
     onItemClick: () -> Unit
 ) {
-    val isReady = item.status == "ready" || item.status == "served"
-    val cardBg = if (isReady) GreenReadyTint.copy(alpha = 0.3f) else Color.White
+    val statusLower = item.status?.lowercase()?.trim().orEmpty()
+    // KOT+ cancel keeps the row (qty unchanged) and sets status=cancelled — do not expect qty 0
+    val isCancelled = statusLower == "cancelled" || statusLower == "canceled"
+    val isReady = statusLower == "ready" || statusLower == "served"
+    val cardBg = when {
+        isCancelled -> Color(0xFFFFEBEE)
+        isReady -> GreenReadyTint.copy(alpha = 0.3f)
+        else -> Color.White
+    }
+    val borderColor = when {
+        isCancelled -> Color(0xFFEF9A9A)
+        isReady -> GreenReadyTint
+        else -> Color(0xFFEEEEEE)
+    }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .border(1.dp, if (isReady) GreenReadyTint else Color(0xFFEEEEEE), RoundedCornerShape(8.dp))
-            .clickable { onItemClick() },
+            .border(1.dp, borderColor, RoundedCornerShape(8.dp))
+            .clickable(enabled = !isCancelled) { onItemClick() },
         colors = CardDefaults.cardColors(containerColor = cardBg)
     ) {
         Column(
@@ -634,44 +657,73 @@ fun OrderItemCard(
                             text = item.productName,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
-                            color = TextDark
+                            color = if (isCancelled) TextMuted else TextDark,
+                            textDecoration = if (isCancelled) TextDecoration.LineThrough else null
                         )
                         Text(
                             text = CurrencyConfig.format(item.price),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = PinkPrimary
+                            color = if (isCancelled) TextMuted else PinkPrimary
                         )
+                        if (isCancelled) {
+                            Text(
+                                text = "CANCELLED",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFFC62828),
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        } else if (statusLower == "kot") {
+                            Text(
+                                text = "KOT Sent",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFE65100),
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
                     }
                 }
 
-                // Pink Qty Stepper (- / qty / +)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .background(PinkLightBg, RoundedCornerShape(6.dp))
-                        .padding(horizontal = 4.dp, vertical = 2.dp)
-                ) {
-                    IconButton(
-                        onClick = { onQtyChange(item.quantity - 1) },
-                        modifier = Modifier.size(26.dp)
-                    ) {
-                        Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = PinkPrimary)
-                    }
-
+                if (isCancelled) {
+                    // After KOT, cancel keeps qty in DB — show locked, not 0
                     Text(
-                        text = "${item.quantity}",
+                        text = "×${item.quantity}",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = PinkPrimary,
-                        modifier = Modifier.padding(horizontal = 6.dp)
+                        color = TextMuted,
+                        modifier = Modifier.padding(top = 4.dp, end = 4.dp)
                     )
-
-                    IconButton(
-                        onClick = { onQtyChange(item.quantity + 1) },
-                        modifier = Modifier.size(26.dp)
+                } else {
+                    // Pink Qty Stepper (- / qty / +)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .background(PinkLightBg, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Increase", tint = PinkPrimary)
+                        IconButton(
+                            onClick = { onQtyChange(item.quantity - 1) },
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = PinkPrimary)
+                        }
+
+                        Text(
+                            text = "${item.quantity}",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PinkPrimary,
+                            modifier = Modifier.padding(horizontal = 6.dp)
+                        )
+
+                        IconButton(
+                            onClick = { onQtyChange(item.quantity + 1) },
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Increase", tint = PinkPrimary)
+                        }
                     }
                 }
             }

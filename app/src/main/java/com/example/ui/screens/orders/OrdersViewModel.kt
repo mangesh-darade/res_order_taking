@@ -20,7 +20,8 @@ data class OrdersUiState(
     val order: OrderBootstrap? = null,
     val selectedGuestFilter: Int = -1, // -1 = All, 0 = Table Items, 1..N = Guest 1..N
     val snackbarMessage: String? = null,
-    val isFinalized: Boolean = false
+    val isFinalized: Boolean = false,
+    val isSendingKot: Boolean = false
 )
 
 class OrdersViewModel(
@@ -46,7 +47,7 @@ class OrdersViewModel(
             while (isActive) {
                 delay(3000)
                 val tId = _uiState.value.tableId
-                if (tId != null) {
+                if (tId != null && !_uiState.value.isSendingKot) {
                     loadOrderData(tId, silent = true)
                 }
             }
@@ -118,6 +119,10 @@ class OrdersViewModel(
             val result = repository.updateItemQuantity(orderId, itemId, newQty)
             result.onSuccess { updated ->
                 _uiState.value = _uiState.value.copy(order = updated)
+            }.onFailure { e ->
+                _uiState.value = _uiState.value.copy(
+                    snackbarMessage = e.message ?: "Could not update item"
+                )
             }
         }
     }
@@ -125,16 +130,32 @@ class OrdersViewModel(
     fun sendKot() {
         val currentOrder = _uiState.value.order ?: return
         val orderId = currentOrder.orderId ?: return
+        if (_uiState.value.isSendingKot) {
+            return
+        }
+        val items = currentOrder.guests.flatMap { it.items }
+        val hasPending = items.any { it.status.equals("pending", ignoreCase = true) }
         if (currentOrder.totalItems == 0) {
             _uiState.value = _uiState.value.copy(snackbarMessage = "Cannot send KOT: Order is empty")
             return
         }
+        if (!hasPending) {
+            _uiState.value = _uiState.value.copy(snackbarMessage = "No pending items to send. KOT already up to date.")
+            return
+        }
         viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSendingKot = true)
             val result = repository.sendKot(orderId)
             result.onSuccess { updated ->
                 _uiState.value = _uiState.value.copy(
                     order = updated,
+                    isSendingKot = false,
                     snackbarMessage = "KOT Sent to Kitchen!"
+                )
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(
+                    isSendingKot = false,
+                    snackbarMessage = "Failed to send KOT. Please retry."
                 )
             }
         }
@@ -160,7 +181,9 @@ class OrdersViewModel(
             _uiState.value = _uiState.value.copy(snackbarMessage = "Add items first before finalizing order")
             return
         }
-        if (order.status == "active" || order.guests.flatMap { it.items }.any { it.status == "pending" }) {
+        val items = order.guests.flatMap { it.items }
+        val hasPending = items.any { it.status.equals("pending", ignoreCase = true) }
+        if (hasPending || order.status.equals("active", ignoreCase = true)) {
             _uiState.value = _uiState.value.copy(snackbarMessage = "Send KOT first before finalizing order")
             return
         }

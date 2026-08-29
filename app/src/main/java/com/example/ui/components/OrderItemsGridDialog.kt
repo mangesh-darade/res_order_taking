@@ -299,7 +299,9 @@ fun GridItemCard(
     onQtyChange: (Int) -> Unit
 ) {
     val item = gridItem.item
-    val isReady = item.status == "ready" || item.status == "served"
+    val statusLower = item.status?.lowercase()?.trim().orEmpty()
+    val isCancelled = statusLower == "cancelled" || statusLower == "canceled"
+    val isReady = statusLower == "ready" || statusLower == "served"
     val isVeg = item.vegType?.lowercase() == "veg"
 
     Card(
@@ -308,11 +310,19 @@ fun GridItemCard(
             .clip(RoundedCornerShape(10.dp))
             .border(
                 1.dp,
-                if (isReady) GreenReadyTint else Color(0xFFE0E0E0),
+                when {
+                    isCancelled -> Color(0xFFEF9A9A)
+                    isReady -> GreenReadyTint
+                    else -> Color(0xFFE0E0E0)
+                },
                 RoundedCornerShape(10.dp)
             ),
         colors = CardDefaults.cardColors(
-            containerColor = if (isReady) GreenReadyTint.copy(alpha = 0.2f) else Color.White
+            containerColor = when {
+                isCancelled -> Color(0xFFFFEBEE)
+                isReady -> GreenReadyTint.copy(alpha = 0.2f)
+                else -> Color.White
+            }
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -456,13 +466,15 @@ fun GridItemCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Status Badge
-                val statusText = when (item.status?.lowercase()) {
+                val statusText = when (statusLower) {
+                    "cancelled", "canceled" -> "CANCELLED"
                     "kot" -> "KOT Sent"
                     "ready" -> "Ready"
                     "served" -> "Served"
                     else -> "Pending"
                 }
-                val statusColor = when (item.status?.lowercase()) {
+                val statusColor = when (statusLower) {
+                    "cancelled", "canceled" -> Color(0xFFC62828)
                     "kot" -> Color(0xFFE65100)
                     "ready" -> Color(0xFF0288D1)
                     "served" -> GreenServed
@@ -482,33 +494,42 @@ fun GridItemCard(
                     )
                 }
 
-                // Quantity Stepper
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .background(PinkLightBg, RoundedCornerShape(6.dp))
-                        .padding(horizontal = 2.dp, vertical = 1.dp)
-                ) {
-                    IconButton(
-                        onClick = { onQtyChange(item.quantity - 1) },
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = PinkPrimary, modifier = Modifier.size(14.dp))
-                    }
-
+                if (isCancelled) {
                     Text(
-                        text = "${item.quantity}",
+                        text = "×${item.quantity}",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
-                        color = PinkPrimary,
-                        modifier = Modifier.padding(horizontal = 4.dp)
+                        color = TextMuted
                     )
-
-                    IconButton(
-                        onClick = { onQtyChange(item.quantity + 1) },
-                        modifier = Modifier.size(24.dp)
+                } else {
+                    // Quantity Stepper
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .background(PinkLightBg, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 2.dp, vertical = 1.dp)
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Increase", tint = PinkPrimary, modifier = Modifier.size(14.dp))
+                        IconButton(
+                            onClick = { onQtyChange(item.quantity - 1) },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = PinkPrimary, modifier = Modifier.size(14.dp))
+                        }
+
+                        Text(
+                            text = "${item.quantity}",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PinkPrimary,
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
+
+                        IconButton(
+                            onClick = { onQtyChange(item.quantity + 1) },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Increase", tint = PinkPrimary, modifier = Modifier.size(14.dp))
+                        }
                     }
                 }
             }
