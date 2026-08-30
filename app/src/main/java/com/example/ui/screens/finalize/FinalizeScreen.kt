@@ -20,9 +20,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.material.icons.filled.Print
-import androidx.compose.material.icons.filled.ReceiptLong
-import com.example.ui.components.InvoiceDialog
 import com.example.ui.components.TopHeaderBar
 import com.example.ui.theme.*
 import com.example.util.CurrencyConfig
@@ -36,7 +33,6 @@ fun FinalizeScreen(
     viewModel: FinalizeViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var showInvoiceDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(orderId) {
         viewModel.loadAndFinalize(orderId, onNavigateToTables)
@@ -205,38 +201,7 @@ fun FinalizeScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Button(
-                            onClick = { showInvoiceDialog = true },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(44.dp)
-                                .testTag("view_invoice_button"),
-                            colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ReceiptLong,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "VIEW & PRINT SALES INVOICE",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
                     }
-                }
-
-                if (showInvoiceDialog) {
-                    InvoiceDialog(
-                        order = order,
-                        saleId = uiState.finalizeResult?.saleId,
-                        onDismissRequest = { showInvoiceDialog = false }
-                    )
                 }
 
                 Text(
