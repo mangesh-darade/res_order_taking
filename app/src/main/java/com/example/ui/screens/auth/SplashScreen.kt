@@ -36,7 +36,7 @@ fun SplashScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(Unit) {
-        viewModel.checkAuthAndLoadBranding(context) { isLoggedIn ->
+        viewModel.checkAuthAndLoadBranding(context) { isLoggedIn, _ ->
             if (isLoggedIn) {
                 onNavigateToMain()
             } else {

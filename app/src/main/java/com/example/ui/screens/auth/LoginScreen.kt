@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.example.data.api.ApiSettingsManager
 import com.example.ui.components.SettingsDialog
 import com.example.ui.theme.PinkLightBg
 import com.example.ui.theme.PinkPrimary
@@ -50,8 +51,11 @@ fun LoginScreen(
     var showSettingsDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
+        ApiSettingsManager.init(context)
         viewModel.loadBranding(context)
     }
+
+    val setupComplete = uiState.isSetupComplete
 
     Box(
         modifier = Modifier
@@ -92,6 +96,33 @@ fun LoginScreen(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            if (!setupComplete) {
+                Surface(
+                    color = Color(0xFFFFF3E0),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp)
+                        .testTag("setup_required_banner")
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "Server setup required",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = Color(0xFFE65100)
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Tap the settings gear (top right) → login with admin credentials → set API URL & X-API-KEY → TEST API → SAVE. Then you can login or create a staff account.",
+                            fontSize = 12.sp,
+                            color = TextDark,
+                            lineHeight = 17.sp
+                        )
+                    }
+                }
+            }
+
             // Card Container
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -149,6 +180,33 @@ fun LoginScreen(
 
                     HorizontalDivider(color = Color(0xFFEEEEEE), modifier = Modifier.padding(bottom = 16.dp))
 
+                    if (!uiState.isSetupComplete) {
+                        Surface(
+                            color = Color(0xFFFFF3E0),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 14.dp)
+                                .testTag("setup_required_banner")
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "Server setup required",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = Color(0xFFE65100)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Tap the gear (⚙) → login with admin credentials → set API URL & key → TEST → SAVE. Then you can register / login.",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFBF360C),
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+                    }
+
                     // Error Message Banner
                     uiState.errorMessage?.let { error ->
                         Surface(
@@ -183,6 +241,7 @@ fun LoginScreen(
                     OutlinedTextField(
                         value = uiState.identity,
                         onValueChange = viewModel::onIdentityChanged,
+                        enabled = uiState.isSetupComplete,
                         label = { Text("Username / Email / Mobile", fontSize = 13.sp) },
                         leadingIcon = {
                             Icon(Icons.Default.AccountCircle, contentDescription = null, tint = PinkPrimary)
@@ -210,6 +269,7 @@ fun LoginScreen(
                     OutlinedTextField(
                         value = uiState.password,
                         onValueChange = viewModel::onPasswordChanged,
+                        enabled = uiState.isSetupComplete,
                         label = { Text("Password", fontSize = 13.sp) },
                         leadingIcon = {
                             Icon(Icons.Default.Lock, contentDescription = null, tint = PinkPrimary)
@@ -258,7 +318,7 @@ fun LoginScreen(
                                 onLoginSuccess()
                             }
                         },
-                        enabled = !uiState.isLoading,
+                        enabled = !uiState.isLoading && uiState.isSetupComplete,
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary),
                         modifier = Modifier
@@ -300,24 +360,26 @@ fun LoginScreen(
                     ) {
                         TextButton(
                             onClick = onNavigateToForgotPassword,
+                            enabled = uiState.isSetupComplete,
                             modifier = Modifier.testTag("forgot_password_button")
                         ) {
                             Text(
                                 text = "Forgot Password?",
                                 fontSize = 12.sp,
-                                color = PinkPrimary,
+                                color = if (uiState.isSetupComplete) PinkPrimary else TextMuted,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
 
                         TextButton(
                             onClick = onNavigateToRegisterInfo,
+                            enabled = uiState.isSetupComplete,
                             modifier = Modifier.testTag("register_info_button")
                         ) {
                             Text(
-                                text = "Staff Info / Register",
+                                text = "Create Account",
                                 fontSize = 12.sp,
-                                color = TextMuted,
+                                color = if (uiState.isSetupComplete) PinkPrimary else TextMuted,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -328,7 +390,12 @@ fun LoginScreen(
 
         if (showSettingsDialog) {
             SettingsDialog(
-                onDismissRequest = { showSettingsDialog = false }
+                onDismissRequest = { showSettingsDialog = false },
+                onSetupSaved = {
+                    showSettingsDialog = false
+                    viewModel.refreshSetupState(context)
+                    Toast.makeText(context, "Server configured. You can login or create account.", Toast.LENGTH_LONG).show()
+                }
             )
         }
     }

@@ -3,6 +3,7 @@ package com.example.ui.screens.auth
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.api.ApiSettingsManager
 import com.example.data.model.BrandingInfo
 import com.example.data.model.LoginUser
 import com.example.data.repository.AuthRepository
@@ -12,14 +13,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 data class LoginUiState(
-    val identity: String = "admin",
-    val password: String = "admin123",
+    val identity: String = "",
+    val password: String = "",
     val selectedRole: String = "Captain / Waiter",
     val isPasswordVisible: Boolean = false,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val branding: BrandingInfo = BrandingInfo(),
-    val loggedInUser: LoginUser? = null
+    val loggedInUser: LoginUser? = null,
+    val isSetupComplete: Boolean = false
 )
 
 class LoginViewModel : ViewModel() {
@@ -31,8 +33,25 @@ class LoginViewModel : ViewModel() {
     fun loadBranding(context: Context) {
         viewModelScope.launch {
             authRepo.init(context)
-            val branding = authRepo.fetchBranding()
-            _uiState.value = _uiState.value.copy(branding = branding)
+            val setup = ApiSettingsManager.isSetupComplete
+            val branding = if (setup) {
+                authRepo.fetchBranding()
+            } else {
+                BrandingInfo(
+                    siteName = "Order Taking",
+                    loginTitle = "Configure API server to continue",
+                    primaryColor = "#E9176B"
+                )
+            }
+            _uiState.value = _uiState.value.copy(branding = branding, isSetupComplete = setup)
+        }
+    }
+
+    fun refreshSetupState(context: Context) {
+        authRepo.init(context)
+        _uiState.value = _uiState.value.copy(isSetupComplete = ApiSettingsManager.isSetupComplete)
+        if (ApiSettingsManager.isSetupComplete) {
+            loadBranding(context)
         }
     }
 

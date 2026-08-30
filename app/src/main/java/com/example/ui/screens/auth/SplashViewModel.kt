@@ -14,7 +14,8 @@ import kotlinx.coroutines.launch
 data class SplashUiState(
     val isLoading: Boolean = true,
     val branding: BrandingInfo = BrandingInfo(),
-    val isLoggedIn: Boolean = false
+    val isLoggedIn: Boolean = false,
+    val isSetupComplete: Boolean = false
 )
 
 class SplashViewModel : ViewModel() {
@@ -23,20 +24,33 @@ class SplashViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(SplashUiState())
     val uiState: StateFlow<SplashUiState> = _uiState.asStateFlow()
 
-    fun checkAuthAndLoadBranding(context: Context, onResult: (isLoggedIn: Boolean) -> Unit) {
+    /**
+     * @param onResult (isLoggedIn, isSetupComplete)
+     */
+    fun checkAuthAndLoadBranding(context: Context, onResult: (isLoggedIn: Boolean, isSetupComplete: Boolean) -> Unit) {
         viewModelScope.launch {
             authRepo.init(context)
-            val branding = authRepo.fetchBranding()
+            val setupDone = authRepo.isSetupComplete(context)
             val loggedIn = authRepo.isLoggedIn(context)
-            
+            val branding = if (setupDone) {
+                authRepo.fetchBranding()
+            } else {
+                BrandingInfo(
+                    siteName = "Order Taking",
+                    loginTitle = "Configure server first",
+                    primaryColor = "#E9176B"
+                )
+            }
+
             _uiState.value = SplashUiState(
                 isLoading = false,
                 branding = branding,
-                isLoggedIn = loggedIn
+                isLoggedIn = loggedIn,
+                isSetupComplete = setupDone
             )
-            
-            delay(800) // Brief smooth splash experience
-            onResult(loggedIn)
+
+            delay(700)
+            onResult(loggedIn && setupDone, setupDone)
         }
     }
 }
