@@ -30,7 +30,6 @@ fun TopHeaderBar(
     onMenuClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
-    var showSettingsDialog by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
 
     val currentUser by AuthRepository.getInstance().currentUser.collectAsState()
@@ -172,21 +171,8 @@ fun TopHeaderBar(
                         HorizontalDivider(color = Color(0xFFEEEEEE))
                     }
 
-                    DropdownMenuItem(
-                        text = { Text("Server & API Settings", fontSize = 13.sp, color = TextDark) },
-                        onClick = {
-                            menuExpanded = false
-                            showSettingsDialog = true
-                        },
-                        leadingIcon = {
-                            Icon(Icons.Default.Settings, contentDescription = null, tint = PinkPrimary)
-                        },
-                        modifier = Modifier.testTag("menu_api_settings")
-                    )
-
+                    // Server & API Settings: only on Login gear (Darade auth) — hidden after login
                     if (currentUser != null && onLogoutClick != null) {
-                        HorizontalDivider(color = Color(0xFFEEEEEE))
-
                         DropdownMenuItem(
                             text = { Text("LOGOUT", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Red) },
                             onClick = {
@@ -203,12 +189,6 @@ fun TopHeaderBar(
                 }
             }
         }
-    }
-
-    if (showSettingsDialog) {
-        SettingsDialog(
-            onDismissRequest = { showSettingsDialog = false }
-        )
     }
 }
 
