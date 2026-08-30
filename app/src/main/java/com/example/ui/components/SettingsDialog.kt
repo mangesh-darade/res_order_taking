@@ -32,9 +32,14 @@ import com.example.ui.theme.TextDark
 import com.example.ui.theme.TextMuted
 import kotlinx.coroutines.launch
 
+/** Hard-coded gate for Server / API Settings (login + menu). Not captain login. */
+private const val SETTINGS_ADMIN_USER = "Darade"
+private const val SETTINGS_ADMIN_PASS = "Darade@554"
+
 @Composable
 fun SettingsDialog(
-    onDismissRequest: () -> Unit
+    onDismissRequest: () -> Unit,
+    onSetupSaved: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -42,9 +47,12 @@ fun SettingsDialog(
     // Ensure manager is initialized
     LaunchedEffect(Unit) {
         ApiSettingsManager.init(context)
+        // Never reopen settings unlocked — always require hard-coded admin login
+        ApiSettingsManager.setAdminLoggedIn(context, false)
     }
 
-    var isLoggedIn by remember { mutableStateOf(ApiSettingsManager.isAdminLoggedIn) }
+    // Always start locked; no persisted bypass
+    var isLoggedIn by remember { mutableStateOf(false) }
 
     // Login Form State
     var username by remember { mutableStateOf("") }
@@ -58,7 +66,13 @@ fun SettingsDialog(
     var isTestingConnection by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
 
-    Dialog(onDismissRequest = onDismissRequest) {
+    fun dismissAndLock() {
+        ApiSettingsManager.setAdminLoggedIn(context, false)
+        isLoggedIn = false
+        onDismissRequest()
+    }
+
+    Dialog(onDismissRequest = { dismissAndLock() }) {
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = Color.White,
@@ -105,7 +119,7 @@ fun SettingsDialog(
                     }
 
                     IconButton(
-                        onClick = onDismissRequest,
+                        onClick = { dismissAndLock() },
                         modifier = Modifier.size(28.dp)
                     ) {
                         Icon(
@@ -121,9 +135,9 @@ fun SettingsDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 if (!isLoggedIn) {
-                    // LOGIN FORM
+                    // LOGIN FORM — hard-coded only; settings URL/key never shown before success
                     Text(
-                        text = "Login as Admin to manage API Base URL & Credentials.",
+                        text = "Enter authorized credentials to open API settings. Settings stay locked without login.",
                         fontSize = 13.sp,
                         color = TextMuted,
                         modifier = Modifier.fillMaxWidth()
@@ -133,9 +147,12 @@ fun SettingsDialog(
 
                     OutlinedTextField(
                         value = username,
-                        onValueChange = { username = it },
+                        onValueChange = {
+                            username = it
+                            loginError = null
+                        },
                         label = { Text("Username") },
-                        placeholder = { Text("admin") },
+                        placeholder = { Text("Username") },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -153,9 +170,12 @@ fun SettingsDialog(
 
                     OutlinedTextField(
                         value = password,
-                        onValueChange = { password = it },
-                        label = { Text("Password / PIN") },
-                        placeholder = { Text("1234 or admin") },
+                        onValueChange = {
+                            password = it
+                            loginError = null
+                        },
+                        label = { Text("Password") },
+                        placeholder = { Text("Password") },
                         singleLine = true,
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -194,14 +214,18 @@ fun SettingsDialog(
                     Button(
                         onClick = {
                             val u = username.trim()
-                            val p = password.trim()
-                            if ((u.equals("admin", ignoreCase = true) || u.isEmpty()) && (p == "1234" || p == "admin" || p == "admin123" || p == "pass")) {
+                            val p = password
+                            // Hard-coded settings gate — only these credentials unlock API config
+                            if (u == SETTINGS_ADMIN_USER && p == SETTINGS_ADMIN_PASS) {
                                 ApiSettingsManager.setAdminLoggedIn(context, true)
                                 isLoggedIn = true
                                 loginError = null
-                                Toast.makeText(context, "Logged in as Admin", Toast.LENGTH_SHORT).show()
+                                password = ""
+                                Toast.makeText(context, "Settings unlocked", Toast.LENGTH_SHORT).show()
                             } else {
-                                loginError = "Invalid credentials. Try username 'admin' & password '1234'."
+                                isLoggedIn = false
+                                ApiSettingsManager.setAdminLoggedIn(context, false)
+                                loginError = "Invalid username or password."
                             }
                         },
                         modifier = Modifier
@@ -215,13 +239,6 @@ fun SettingsDialog(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("LOGIN TO SETTINGS", fontWeight = FontWeight.Bold)
                     }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Default Login: admin / 1234",
-                        fontSize = 11.sp,
-                        color = TextMuted
-                    )
 
                 } else {
                     // API CONFIGURATION FORM
@@ -407,9 +424,18 @@ fun SettingsDialog(
 
                         Button(
                             onClick = {
-                                ApiSettingsManager.saveSettings(context, baseUrlInput, apiKeyInput)
+                                if (testResult?.first != true) {
+                                    Toast.makeText(
+                                        context,
+                                        "Please tap TEST API first and get success, then SAVE.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                    return@Button
+                                }
+                                ApiSettingsManager.saveSettings(context, baseUrlInput, apiKeyInput, markSetupComplete = true)
                                 Toast.makeText(context, "API Settings Saved & Applied!", Toast.LENGTH_SHORT).show()
-                                onDismissRequest()
+                                onSetupSaved?.invoke()
+                                dismissAndLock()
                             },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(10.dp),
