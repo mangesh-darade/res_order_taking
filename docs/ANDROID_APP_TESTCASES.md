@@ -161,7 +161,7 @@ http://192.168.5.215/ElintOm/ordertakingapi/branding
 
 ---
 
-## G. Stock (ElintOm POS **Overselling**)
+## G. Stock (ElintOM **Overselling**)
 
 | ID | Title | Setup | Steps | Expected | P/F |
 |----|-------|-------|-------|----------|-----|

@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "ElintOM POS"
+rootProject.name = "ElintOM"
 
 include(":app")

@@ -1,4 +1,4 @@
-# 🔗 Complete API & Endpoints Mapping — Order Taking & ElintOm POS
+# 🔗 Complete API & Endpoints Mapping — Order Taking & ElintOM
 
 > **Repos Covered:**
 > 1. `order_taking` (Android Client — Kotlin / Retrofit / Jetpack Compose)
