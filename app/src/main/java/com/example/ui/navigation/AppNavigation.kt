@@ -10,7 +10,7 @@ import androidx.navigation.navArgument
 import com.example.ui.components.MainTab
 import com.example.ui.screens.auth.ForgotPasswordScreen
 import com.example.ui.screens.auth.LoginScreen
-import com.example.ui.screens.auth.RegisterInfoScreen
+import com.example.ui.screens.auth.RegisterScreen
 import com.example.ui.screens.auth.SplashScreen
 import com.example.ui.screens.finalize.FinalizeScreen
 import com.example.ui.screens.menu.MenuScreen
@@ -111,10 +111,13 @@ fun AppNavigation(
             )
         }
 
-        // Auth: Register Info
+        // Auth: Register (creates ElintOm sma_users via API)
         composable(Routes.REGISTER_INFO) {
-            RegisterInfoScreen(
+            RegisterScreen(
                 onBackToLogin = {
+                    navController.popBackStack()
+                },
+                onRegistered = {
                     navController.popBackStack()
                 }
             )
