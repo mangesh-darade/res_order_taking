@@ -3,6 +3,7 @@ package com.example.data.repository
 import android.content.Context
 import android.content.SharedPreferences
 import com.example.data.api.ApiClient
+import com.example.data.api.ApiSettingsManager
 import com.example.data.api.RestaurantApiService
 import com.example.data.model.BrandingInfo
 import com.example.data.model.LoginUser
@@ -52,6 +53,7 @@ class AuthRepository private constructor() {
     fun init(context: Context) {
         if (prefs == null) {
             prefs = context.applicationContext.getSharedPreferences(PREF_AUTH, Context.MODE_PRIVATE)
+            ApiSettingsManager.init(context)
             val isLoggedIn = prefs?.getBoolean(KEY_IS_LOGGED_IN, false) ?: false
             if (isLoggedIn) {
                 val user = LoginUser(
@@ -79,6 +81,11 @@ class AuthRepository private constructor() {
         return prefs?.getBoolean(KEY_IS_LOGGED_IN, false) ?: false
     }
 
+    fun isSetupComplete(context: Context): Boolean {
+        init(context)
+        return ApiSettingsManager.isSetupComplete
+    }
+
     suspend fun fetchBranding(): BrandingInfo = withContext(Dispatchers.IO) {
         try {
             val response = api.getBranding()
@@ -91,8 +98,7 @@ class AuthRepository private constructor() {
                     ?.apply()
                 return@withContext data
             }
-        } catch (e: Exception) {
-            // fallback
+        } catch (_: Exception) {
         }
         val fallback = BrandingInfo(
             siteName = "ElintOm Restaurant",
@@ -106,6 +112,22 @@ class AuthRepository private constructor() {
         return@withContext fallback
     }
 
+    private fun apiErrorMessage(response: retrofit2.Response<*>): String {
+        val body = response.body()
+        // ApiResponse envelope
+        try {
+            @Suppress("UNCHECKED_CAST")
+            val err = (body as? com.example.data.model.ApiResponse<*>)?.response?.error
+            if (!err.isNullOrBlank()) return err
+        } catch (_: Exception) {
+        }
+        val raw = try { response.errorBody()?.string() } catch (_: Exception) { null }
+        if (!raw.isNullOrBlank()) {
+            Regex("\"error\"\\s*:\\s*\"([^\"]+)\"").find(raw)?.groupValues?.getOrNull(1)?.let { return it }
+        }
+        return "Request failed (${response.code()})"
+    }
+
     suspend fun login(
         context: Context,
         identity: String,
@@ -113,10 +135,13 @@ class AuthRepository private constructor() {
         selectedRole: String = "Captain / Waiter"
     ): Result<LoginUser> = withContext(Dispatchers.IO) {
         init(context)
+        if (!ApiSettingsManager.isSetupComplete) {
+            return@withContext Result.failure(Exception("Configure API settings first (gear icon)."))
+        }
         try {
             val response = api.login(identity = identity, password = password, username = identity, role = selectedRole)
             val body = response.body()
-            if (response.isSuccessful && body?.data != null) {
+            if (response.isSuccessful && body?.response?.status == "SUCCESS" && body.data != null) {
                 val user = body.data.copy(
                     role = body.data.role ?: selectedRole,
                     displayName = body.data.displayName ?: identity.replaceFirstChar { it.uppercase() }
@@ -124,28 +149,10 @@ class AuthRepository private constructor() {
                 saveUserSession(user)
                 return@withContext Result.success(user)
             }
+            return@withContext Result.failure(Exception(apiErrorMessage(response)))
         } catch (e: Exception) {
-            // fallback
+            return@withContext Result.failure(Exception(e.localizedMessage ?: "Network error. Check API URL."))
         }
-
-        // Demo / Fallback login if offline or backend unavailable
-        val cleanIdentity = identity.trim().ifEmpty { "staff1" }
-        val roleDisplayName = when {
-            selectedRole.contains("Manager", ignoreCase = true) -> "Manager $cleanIdentity"
-            selectedRole.contains("Kitchen", ignoreCase = true) -> "Kitchen Staff"
-            else -> "Captain $cleanIdentity"
-        }
-
-        val user = LoginUser(
-            userId = (cleanIdentity.hashCode() and 0x7FFFFFFF) % 1000 + 1,
-            username = cleanIdentity,
-            displayName = roleDisplayName,
-            email = "$cleanIdentity@elintom.com",
-            role = selectedRole
-        )
-
-        saveUserSession(user)
-        return@withContext Result.success(user)
     }
 
     private fun saveUserSession(user: LoginUser) {
@@ -160,18 +167,78 @@ class AuthRepository private constructor() {
             ?.apply()
     }
 
-    suspend fun forgotPassword(identity: String): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun register(
+        firstName: String,
+        lastName: String,
+        username: String,
+        email: String,
+        phone: String?,
+        password: String,
+        passwordConfirm: String
+    ): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val response = api.forgotPassword(identity)
-            if (response.isSuccessful) {
-                val msg = response.body()?.data?.get("message") 
-                    ?: "Password reset instructions sent to your email/username."
+            val response = api.register(
+                firstName = firstName.trim(),
+                lastName = lastName.trim(),
+                username = username.trim(),
+                email = email.trim(),
+                phone = phone?.trim()?.ifEmpty { null },
+                password = password,
+                passwordConfirm = passwordConfirm
+            )
+            val body = response.body()
+            if (response.isSuccessful && body?.response?.status == "SUCCESS") {
+                val msg = body.data?.get("message") ?: "Account created. You can login now."
                 return@withContext Result.success(msg)
             }
+            return@withContext Result.failure(Exception(apiErrorMessage(response)))
         } catch (e: Exception) {
-            // fallback
+            return@withContext Result.failure(Exception(e.localizedMessage ?: "Network error"))
         }
-        return@withContext Result.success("If an account exists for $identity, password reset instructions have been sent.")
+    }
+
+    suspend fun forgotPassword(identity: String): Result<Map<String, String>> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.forgotPassword(identity.trim())
+            val body = response.body()
+            if (response.isSuccessful && body?.response?.status == "SUCCESS" && body.data != null) {
+                return@withContext Result.success(body.data)
+            }
+            return@withContext Result.failure(Exception(apiErrorMessage(response)))
+        } catch (e: Exception) {
+            return@withContext Result.failure(Exception(e.localizedMessage ?: "Network error"))
+        }
+    }
+
+    suspend fun verifyResetOtp(identity: String, otp: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.verifyResetOtp(identity.trim(), otp.trim())
+            val body = response.body()
+            if (response.isSuccessful && body?.response?.status == "SUCCESS") {
+                return@withContext Result.success(body.data?.get("message") ?: "OTP verified")
+            }
+            return@withContext Result.failure(Exception(apiErrorMessage(response)))
+        } catch (e: Exception) {
+            return@withContext Result.failure(Exception(e.localizedMessage ?: "Network error"))
+        }
+    }
+
+    suspend fun resetPassword(
+        identity: String,
+        otp: String,
+        password: String,
+        passwordConfirm: String
+    ): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.resetPassword(identity.trim(), otp.trim(), password, passwordConfirm)
+            val body = response.body()
+            if (response.isSuccessful && body?.response?.status == "SUCCESS") {
+                return@withContext Result.success(body.data?.get("message") ?: "Password updated")
+            }
+            return@withContext Result.failure(Exception(apiErrorMessage(response)))
+        } catch (e: Exception) {
+            return@withContext Result.failure(Exception(e.localizedMessage ?: "Network error"))
+        }
     }
 
     suspend fun getRegisterInfo(): RegisterInfo = withContext(Dispatchers.IO) {
@@ -180,12 +247,11 @@ class AuthRepository private constructor() {
             if (response.isSuccessful && response.body()?.data != null) {
                 return@withContext response.body()!!.data!!
             }
-        } catch (e: Exception) {
-            // fallback
+        } catch (_: Exception) {
         }
         return@withContext RegisterInfo(
-            infoMessage = "Staff & Captain accounts are created by the Restaurant Admin.",
-            contactAdmin = "Please contact your POS Admin/Manager to create your staff account or assign roles."
+            infoMessage = "Create your Captain / Waiter account in ElintOm.",
+            contactAdmin = "Use a valid email for password reset OTP."
         )
     }
 

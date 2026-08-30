@@ -237,6 +237,34 @@ interface RestaurantApiService {
         @Field("identity") identity: String
     ): Response<ApiResponse<Map<String, String>>>
 
+    @FormUrlEncoded
+    @POST("verify_reset_otp")
+    suspend fun verifyResetOtp(
+        @Field("identity") identity: String,
+        @Field("otp") otp: String
+    ): Response<ApiResponse<Map<String, String>>>
+
+    @FormUrlEncoded
+    @POST("reset_password")
+    suspend fun resetPassword(
+        @Field("identity") identity: String,
+        @Field("otp") otp: String,
+        @Field("password") password: String,
+        @Field("password_confirm") passwordConfirm: String
+    ): Response<ApiResponse<Map<String, String>>>
+
+    @FormUrlEncoded
+    @POST("register")
+    suspend fun register(
+        @Field("first_name") firstName: String,
+        @Field("last_name") lastName: String,
+        @Field("username") username: String,
+        @Field("email") email: String,
+        @Field("phone") phone: String?,
+        @Field("password") password: String,
+        @Field("password_confirm") passwordConfirm: String
+    ): Response<ApiResponse<Map<String, String>>>
+
     @GET("register_info")
     suspend fun getRegisterInfo(): Response<ApiResponse<RegisterInfo>>
 }
