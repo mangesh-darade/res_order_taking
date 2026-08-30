@@ -178,9 +178,19 @@ data class LoginUser(
 )
 
 @JsonClass(generateAdapter = true)
+data class RegisterOption(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "description") val description: String? = null,
+    @Json(name = "code") val code: String? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class RegisterInfo(
     @Json(name = "info_message") val infoMessage: String? = "Staff & Captain accounts are created by the Restaurant Admin.",
-    @Json(name = "contact_admin") val contactAdmin: String? = "Please contact your POS Admin/Manager to get login credentials."
+    @Json(name = "contact_admin") val contactAdmin: String? = "Please contact your POS Admin/Manager to get login credentials.",
+    @Json(name = "groups") val groups: List<RegisterOption>? = emptyList(),
+    @Json(name = "warehouses") val warehouses: List<RegisterOption>? = emptyList()
 )
 
 @JsonClass(generateAdapter = true)

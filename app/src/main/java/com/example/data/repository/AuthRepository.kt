@@ -174,7 +174,9 @@ class AuthRepository private constructor() {
         email: String,
         phone: String?,
         password: String,
-        passwordConfirm: String
+        passwordConfirm: String,
+        groupId: String,
+        warehouseIds: List<String>
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
             val response = api.register(
@@ -184,7 +186,9 @@ class AuthRepository private constructor() {
                 email = email.trim(),
                 phone = phone?.trim()?.ifEmpty { null },
                 password = password,
-                passwordConfirm = passwordConfirm
+                passwordConfirm = passwordConfirm,
+                groupId = groupId.trim(),
+                warehouseIds = warehouseIds.joinToString(",")
             )
             val body = response.body()
             if (response.isSuccessful && body?.response?.status == "SUCCESS") {

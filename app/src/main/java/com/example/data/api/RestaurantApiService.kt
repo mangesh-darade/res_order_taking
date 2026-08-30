@@ -262,7 +262,9 @@ interface RestaurantApiService {
         @Field("email") email: String,
         @Field("phone") phone: String?,
         @Field("password") password: String,
-        @Field("password_confirm") passwordConfirm: String
+        @Field("password_confirm") passwordConfirm: String,
+        @Field("group_id") groupId: String,
+        @Field("warehouse_ids") warehouseIds: String
     ): Response<ApiResponse<Map<String, String>>>
 
     @GET("register_info")
