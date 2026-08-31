@@ -101,6 +101,52 @@ class SyncManager private constructor(context: Context) {
         }
     }
 
+    /**
+     * True when this table/order still has queued offline actions not yet synced.
+     * Used to avoid polling overwrite wiping local items before sync finishes.
+     */
+    suspend fun hasPendingForTable(tableId: String?, orderId: String? = null): Boolean {
+        return withContext(Dispatchers.IO) {
+            if (tableId.isNullOrBlank() && orderId.isNullOrBlank()) {
+                return@withContext false
+            }
+            val resolvedOrderId = orderId?.let { resolveOrderId(it) }.orEmpty()
+            val pendingList = dao.getAllPendingActions()
+            for (item in pendingList) {
+                val rowOrderId = resolveOrderId(item.orderId)
+                if (resolvedOrderId.isNotBlank()) {
+                    if (rowOrderId == resolvedOrderId || item.orderId == orderId) {
+                        return@withContext true
+                    }
+                }
+                if (!tableId.isNullOrBlank()) {
+                    if (item.orderId == "TABLE-$tableId") {
+                        return@withContext true
+                    }
+                    if (item.orderId.contains("-$tableId-")) {
+                        return@withContext true
+                    }
+                    try {
+                        @Suppress("UNCHECKED_CAST")
+                        val payload = mapAdapter.fromJson(item.payloadJson) as? Map<String, Any?>
+                        val payloadTableId = payload?.get("tableId")?.toString()
+                        if (payloadTableId == tableId) {
+                            return@withContext true
+                        }
+                        val payloadOrderId = payload?.get("orderId")?.toString()
+                        if (!payloadOrderId.isNullOrBlank() && resolvedOrderId.isNotBlank()
+                            && resolveOrderId(payloadOrderId) == resolvedOrderId
+                        ) {
+                            return@withContext true
+                        }
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+            false
+        }
+    }
+
     fun syncPendingActions() {
         scope.launch {
             if (_isSyncing.value) return@launch

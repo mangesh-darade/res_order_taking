@@ -118,21 +118,35 @@ class RestaurantRepository private constructor() {
     }
 
     suspend fun fetchOrderBootstrap(tableId: String?, orderId: String? = null): Result<OrderBootstrap> = withContext(Dispatchers.IO) {
+        // Fallback memory state lookup: only pick active (non-finalized) order for table
+        var existingOrder = _orders.value.find {
+            (orderId != null && it.orderId == orderId) ||
+            (tableId != null && it.tableId == tableId && it.status != "finalized" && it.status != "completed")
+        }
+
+        val pendingForThis = syncManager?.hasPendingForTable(tableId, orderId ?: existingOrder?.orderId) == true
+        if (pendingForThis && existingOrder != null) {
+            return@withContext Result.success(existingOrder)
+        }
+
         try {
             val response = api.getOrderBootstrap(tableId = tableId, orderId = orderId)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
-                response.body()?.data?.let {
-                    val normalized = updateLocalOrder(it)
+                response.body()?.data?.let { serverOrder ->
+                    val localItemCount = existingOrder?.guests?.flatMap { it.items }?.sumOf { it.quantity } ?: 0
+                    val serverItemCount = serverOrder.guests.flatMap { it.items }.sumOf { it.quantity }
+                    // Server still empty/stale while offline queue is draining — keep local cart
+                    if (existingOrder != null && localItemCount > serverItemCount
+                        && syncManager?.hasPendingForTable(tableId, existingOrder.orderId) == true
+                    ) {
+                        return@withContext Result.success(existingOrder)
+                    }
+                    val normalized = updateLocalOrder(serverOrder)
                     return@withContext Result.success(normalized)
                 }
             }
         } catch (e: Exception) {
             // fallback
-        }
-        // Fallback memory state lookup: only pick active (non-finalized) order for table
-        var existingOrder = _orders.value.find { 
-            (orderId != null && it.orderId == orderId) || 
-            (tableId != null && it.tableId == tableId && it.status != "finalized" && it.status != "completed") 
         }
 
         if (existingOrder == null && tableId != null) {
