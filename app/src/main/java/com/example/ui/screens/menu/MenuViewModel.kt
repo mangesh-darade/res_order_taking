@@ -37,8 +37,9 @@ class MenuViewModel(
         _uiState.value = _uiState.value.copy(tableId = tableId, guestId = guestId)
         viewModelScope.launch {
             repository.fetchBranding()
+            repository.syncMenuCatalogIfOnline()
+            loadCategories()
         }
-        loadCategories()
         loadOrderContext(tableId)
     }
 
@@ -121,9 +122,9 @@ class MenuViewModel(
                     val existing = current.allergies.orEmpty()
                     val already = existing.any { it.name.equals(option.name, ignoreCase = true) }
                     val updatedList = if (already) existing else existing + option
-                    _uiState.value = _uiState.value.copy(
-                        customizationData = current.copy(allergies = updatedList)
-                    )
+                    val updated = current.copy(allergies = updatedList)
+                    _uiState.value = _uiState.value.copy(customizationData = updated)
+                    repository.cacheProductCustomization(updated)
                 }
             }
             onResult(result)

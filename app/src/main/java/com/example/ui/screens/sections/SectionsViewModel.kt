@@ -32,6 +32,7 @@ class SectionsViewModel(
     fun loadSections() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
+            repository.syncFloorPlanIfOnline()
             val result = repository.fetchSections()
             result.onSuccess { list ->
                 val firstSection = list.firstOrNull()

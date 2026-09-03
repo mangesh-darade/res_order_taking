@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.data.model.CustomizationOption
 import com.example.data.model.MenuItem
 import com.example.data.model.ProductCustomization
@@ -318,14 +320,21 @@ fun MenuItemCard(
                 modifier = Modifier
                     .size(80.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFFEEEEEE))
+                    .background(Color(0xFFEEEEEE)),
+                contentAlignment = Alignment.Center
             ) {
                 if (!item.imageUrl.isNullOrBlank()) {
+                    val context = LocalContext.current
                     AsyncImage(
-                        model = item.imageUrl,
+                        model = ImageRequest.Builder(context)
+                            .data(item.imageUrl)
+                            .crossfade(true)
+                            .build(),
                         contentDescription = item.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(4.dp)
                     )
                 }
             }

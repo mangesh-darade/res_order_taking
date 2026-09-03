@@ -54,6 +54,7 @@ class OrdersViewModel(
         autoRefreshJob = viewModelScope.launch {
             while (isActive) {
                 delay(3000)
+                if (!repository.isOnline()) continue
                 val tId = _uiState.value.tableId
                 if (tId != null && !_uiState.value.isSendingKot) {
                     loadOrderData(tId, silent = true)

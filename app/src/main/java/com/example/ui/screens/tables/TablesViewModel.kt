@@ -45,6 +45,7 @@ class TablesViewModel(
         autoRefreshJob = viewModelScope.launch {
             while (isActive) {
                 delay(3000)
+                if (!repository.isOnline()) continue
                 if (_uiState.value.pickTargetMode == null &&
                     _uiState.value.opsDialogTable == null &&
                     _uiState.value.freeActionsDialogTable == null
