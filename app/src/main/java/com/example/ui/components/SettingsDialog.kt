@@ -12,6 +12,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -65,6 +68,54 @@ fun SettingsDialog(
     var apiKeyInput by remember { mutableStateOf(ApiSettingsManager.apiKey) }
     var isTestingConnection by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+
+    // Inline validation errors
+    var urlError by remember { mutableStateOf<String?>(null) }
+    var keyError by remember { mutableStateOf<String?>(null) }
+
+    // Validate fields — returns true if OK
+    fun validateFields(): Boolean {
+        var ok = true
+        val trimmedUrl = baseUrlInput.trim()
+        val trimmedKey = apiKeyInput.trim()
+
+        // URL validation
+        when {
+            trimmedUrl.isBlank() -> {
+                urlError = "Server URL is required"
+                ok = false
+            }
+            !trimmedUrl.startsWith("http://", ignoreCase = true) &&
+            !trimmedUrl.startsWith("https://", ignoreCase = true) -> {
+                urlError = "URL must start with http:// or https://"
+                ok = false
+            }
+            trimmedUrl.length < 10 -> {
+                urlError = "Enter a valid server domain or IP"
+                ok = false
+            }
+            else -> urlError = null
+        }
+
+        // API key validation
+        when {
+            trimmedKey.isBlank() -> {
+                keyError = "API key is required"
+                ok = false
+            }
+            trimmedKey == "YOUR_X_API_KEY" -> {
+                keyError = "Replace with the actual API key from server settings"
+                ok = false
+            }
+            trimmedKey.length < 8 -> {
+                keyError = "API key seems too short — check sma_settings.api_privatekey"
+                ok = false
+            }
+            else -> keyError = null
+        }
+
+        return ok
+    }
 
     fun dismissAndLock() {
         ApiSettingsManager.setAdminLoggedIn(context, false)
@@ -285,20 +336,33 @@ fun SettingsDialog(
                         onValueChange = {
                             baseUrlInput = it
                             testResult = null
+                            urlError = null
                         },
                         label = { Text("Server Domain / URL") },
                         placeholder = { Text("http://devdinein.elintpos.in/") },
                         singleLine = false,
                         maxLines = 3,
+                        isError = urlError != null,
+                        supportingText = urlError?.let { err ->
+                            { Text(err, color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("api_base_url_input"),
                         leadingIcon = {
-                            Icon(Icons.Default.Dns, contentDescription = null, tint = PinkPrimary)
+                            Icon(
+                                Icons.Default.Dns,
+                                contentDescription = null,
+                                tint = if (urlError != null) MaterialTheme.colorScheme.error else PinkPrimary
+                            )
                         },
+                        trailingIcon = if (urlError != null) {
+                            { Icon(Icons.Default.ErrorOutline, contentDescription = "URL error", tint = MaterialTheme.colorScheme.error) }
+                        } else null,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = PinkPrimary,
-                            focusedLabelColor = PinkPrimary
+                            focusedLabelColor = PinkPrimary,
+                            errorBorderColor = MaterialTheme.colorScheme.error
                         )
                     )
 
@@ -316,19 +380,32 @@ fun SettingsDialog(
                         onValueChange = {
                             apiKeyInput = it
                             testResult = null
+                            keyError = null
                         },
                         label = { Text("X-API-KEY") },
-                        placeholder = { Text("YOUR_X_API_KEY") },
+                        placeholder = { Text("Paste API key from server settings") },
                         singleLine = true,
+                        isError = keyError != null,
+                        supportingText = keyError?.let { err ->
+                            { Text(err, color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("api_key_input"),
                         leadingIcon = {
-                            Icon(Icons.Default.Key, contentDescription = null, tint = PinkPrimary)
+                            Icon(
+                                Icons.Default.Key,
+                                contentDescription = null,
+                                tint = if (keyError != null) MaterialTheme.colorScheme.error else PinkPrimary
+                            )
                         },
+                        trailingIcon = if (keyError != null) {
+                            { Icon(Icons.Default.ErrorOutline, contentDescription = "Key error", tint = MaterialTheme.colorScheme.error) }
+                        } else null,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = PinkPrimary,
-                            focusedLabelColor = PinkPrimary
+                            focusedLabelColor = PinkPrimary,
+                            errorBorderColor = MaterialTheme.colorScheme.error
                         )
                     )
 
@@ -389,23 +466,47 @@ fun SettingsDialog(
                     ) {
                         OutlinedButton(
                             onClick = {
+                                if (!validateFields()) return@OutlinedButton
                                 coroutineScope.launch {
                                     isTestingConnection = true
                                     testResult = null
-                                    // Save temporarily to test
+                                    // Apply config temporarily for test
                                     ApiClient.updateConfig(baseUrlInput, apiKeyInput)
                                     try {
                                         val response = ApiClient.service.getSections()
+                                        val code = response.code()
                                         val body = response.body()
-                                        if (response.isSuccessful && (body?.response?.status.equals("SUCCESS", ignoreCase = true) || body?.data != null)) {
-                                            val count = body?.data?.size ?: 0
-                                            testResult = Pair(true, "Connected successfully! $count section(s) loaded.")
-                                        } else {
-                                            val code = response.code()
-                                            testResult = Pair(false, "API returned code $code: ${response.message()}")
+                                        when {
+                                            code == 401 -> {
+                                                keyError = "API key rejected by server (401 Unauthorized)"
+                                                testResult = Pair(false, "Wrong API key — server returned 401. Check sma_settings › api_privatekey.")
+                                            }
+                                            code == 404 -> {
+                                                urlError = "URL not found (404) — check the server domain/path"
+                                                testResult = Pair(false, "Server URL not found (404). Verify the domain and app folder.")
+                                            }
+                                            !response.isSuccessful -> {
+                                                testResult = Pair(false, "Server returned HTTP $code: ${response.message()}")
+                                            }
+                                            body?.response?.status.equals("SUCCESS", ignoreCase = true) || body?.data != null -> {
+                                                val count = body?.data?.size ?: 0
+                                                testResult = Pair(true, "Connected! $count section(s) found. API key accepted ✓")
+                                            }
+                                            else -> {
+                                                testResult = Pair(false, "Unexpected response from server. Check URL.")
+                                            }
                                         }
+                                    } catch (e: java.net.UnknownHostException) {
+                                        urlError = "Host not found — check the domain name"
+                                        testResult = Pair(false, "Cannot reach server: Unknown host. Check URL spelling.")
+                                    } catch (e: java.net.ConnectException) {
+                                        urlError = "Connection refused — server may be offline or wrong port"
+                                        testResult = Pair(false, "Connection refused. Is the server running on this address?")
+                                    } catch (e: java.net.SocketTimeoutException) {
+                                        urlError = "Request timed out — server too slow or wrong IP"
+                                        testResult = Pair(false, "Connection timed out. Try a different URL or check network.")
                                     } catch (e: Exception) {
-                                        testResult = Pair(false, "Connection Failed: ${e.localizedMessage ?: "Unknown network error"}")
+                                        testResult = Pair(false, "Error: ${e.localizedMessage ?: "Unknown network error"}")
                                     } finally {
                                         isTestingConnection = false
                                     }
@@ -424,10 +525,11 @@ fun SettingsDialog(
 
                         Button(
                             onClick = {
+                                if (!validateFields()) return@Button
                                 if (testResult?.first != true) {
                                     Toast.makeText(
                                         context,
-                                        "Please tap TEST API first and get success, then SAVE.",
+                                        "Please tap TEST API first and confirm connection is successful, then SAVE.",
                                         Toast.LENGTH_LONG
                                     ).show()
                                     return@Button

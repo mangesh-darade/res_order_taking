@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,7 +44,10 @@ fun TopHeaderBar(
     val syncManager = remember { com.example.data.sync.SyncManager.getInstance(context) }
     val isOnline by syncManager.isOnline.collectAsState()
     val pendingCount by syncManager.pendingCountFlow.collectAsState(initial = 0)
+    val failedCount by syncManager.failedCountFlow.collectAsState(initial = 0)
     val isSyncing by syncManager.isSyncing.collectAsState()
+
+    var showSyncDialog by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -60,7 +64,13 @@ fun TopHeaderBar(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             // Left: User Profile badge or Date
-            Column(verticalArrangement = Arrangement.Center) {
+            Column(
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .clickable { showSyncDialog = true }
+                    .padding(vertical = 4.dp)
+            ) {
                 if (currentUser != null) {
                     Text(
                         text = currentUser?.displayName ?: "Staff Member",
@@ -71,15 +81,15 @@ fun TopHeaderBar(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
                             shape = CircleShape,
-                            color = if (!isOnline) Color(0xFFFF9800) else if (pendingCount > 0) Color(0xFFFFC107) else Color(0xFF4CAF50),
+                            color = if (failedCount > 0) Color(0xFFF44336) else if (!isOnline) Color(0xFFFF9800) else if (pendingCount > 0) Color(0xFFFFC107) else Color(0xFF4CAF50),
                             modifier = Modifier.size(7.dp)
                         ) {}
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (!isOnline) "OFFLINE (${pendingCount})" else if (pendingCount > 0) "SYNCING (${pendingCount})" else (currentUser?.role ?: "Captain"),
-                            color = Color.White.copy(alpha = 0.9f),
+                            text = if (failedCount > 0) "SYNC FAILED ($failedCount)" else if (!isOnline) "OFFLINE (${pendingCount})" else if (pendingCount > 0) "SYNCING (${pendingCount})" else (currentUser?.role ?: "Captain"),
+                            color = if (failedCount > 0) Color(0xFFFFCDD2) else Color.White.copy(alpha = 0.9f),
                             fontSize = 10.sp,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = if (failedCount > 0) FontWeight.Bold else FontWeight.Medium
                         )
                     }
                 } else {
@@ -94,7 +104,10 @@ fun TopHeaderBar(
             }
 
             // Center: App / Site brand title
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable { showSyncDialog = true }
+            ) {
                 Text(
                     text = (branding.siteName ?: "ELINTOM").uppercase(),
                     color = Color.White,
@@ -103,7 +116,22 @@ fun TopHeaderBar(
                     letterSpacing = 1.2.sp,
                     modifier = Modifier.testTag("app_brand_title")
                 )
-                if (pendingCount > 0) {
+                if (failedCount > 0) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFD32F2F),
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    ) {
+                        Text(
+                            text = "⚠ $failedCount",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                } else if (pendingCount > 0) {
                     Spacer(modifier = Modifier.width(6.dp))
                     Surface(
                         shape = RoundedCornerShape(10.dp),
@@ -171,6 +199,45 @@ fun TopHeaderBar(
                         HorizontalDivider(color = Color(0xFFEEEEEE))
                     }
 
+                    // Offline Sync Queue & History Option
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Sync Queue & Status", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextDark)
+                                if (failedCount > 0) {
+                                    Surface(shape = CircleShape, color = Color(0xFFD32F2F), modifier = Modifier.size(18.dp)) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text("$failedCount", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                } else if (pendingCount > 0) {
+                                    Surface(shape = CircleShape, color = Color(0xFFFF9800), modifier = Modifier.size(18.dp)) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text("$pendingCount", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            showSyncDialog = true
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = if (failedCount > 0) Icons.Default.Warning else Icons.Default.Sync,
+                                contentDescription = null,
+                                tint = if (failedCount > 0) Color(0xFFD32F2F) else PinkPrimary
+                            )
+                        }
+                    )
+
+                    HorizontalDivider(color = Color(0xFFEEEEEE))
+
                     // Server & API Settings: only on Login gear (Darade auth) — hidden after login
                     if (currentUser != null && onLogoutClick != null) {
                         DropdownMenuItem(
@@ -189,6 +256,10 @@ fun TopHeaderBar(
                 }
             }
         }
+    }
+
+    if (showSyncDialog) {
+        SyncStatusDialog(onDismissRequest = { showSyncDialog = false })
     }
 }
 
