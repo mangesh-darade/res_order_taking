@@ -9,6 +9,7 @@ import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,17 +38,41 @@ class SyncManager private constructor(context: Context) {
 
     val isOnline: StateFlow<Boolean> = networkMonitor.isOnline
 
-    val pendingCountFlow = dao.getPendingCountFlow()
+    val pendingCountFlow: Flow<Int> = dao.getPendingCountFlow()
+    val failedCountFlow: Flow<Int> = dao.getFailedCountFlow()
+    val allActionsFlow: Flow<List<PendingSyncEntity>> = dao.getAllActionsFlow()
+    val failedActionsFlow: Flow<List<PendingSyncEntity>> = dao.getFailedActionsFlow()
+
+    /** Fired after each successfully synced queue item. */
+    private var onActionSyncedListener: (suspend (SyncedAction) -> Unit)? = null
+
+    /** Fired when network returns and pending queue drain pass finishes. */
+    private var onNetworkSyncCompleteListener: (suspend () -> Unit)? = null
+
+    fun setOnActionSyncedListener(listener: suspend (SyncedAction) -> Unit) {
+        onActionSyncedListener = listener
+    }
+
+    fun setOnNetworkSyncCompleteListener(listener: suspend () -> Unit) {
+        onNetworkSyncCompleteListener = listener
+    }
+
+    suspend fun getPendingCount(): Int = dao.getPendingCount()
+    suspend fun getFailedCount(): Int = dao.getFailedCount()
 
     init {
         loadIdMaps()
         scope.launch {
             networkMonitor.isOnline.collect { online ->
                 if (online) {
-                    syncPendingActions()
+                    runPendingSyncPass()
                 }
             }
         }
+        // Initialize periodic background worker
+        try {
+            SyncWorker.schedulePeriodicSync(appContext)
+        } catch (_: Exception) {}
     }
 
     suspend fun enqueueAction(orderId: String?, actionType: String, payloadMap: Map<String, Any?>) {
@@ -59,9 +84,12 @@ class SyncManager private constructor(context: Context) {
                 val entity = PendingSyncEntity(
                     orderId = resolvedOrderId,
                     actionType = actionType,
-                    payloadJson = json
+                    payloadJson = json,
+                    status = "PENDING"
                 )
                 dao.insertPendingAction(entity)
+                // Schedule WorkManager to guarantee sync even if app is immediately killed
+                SyncWorker.scheduleImmediateSync(appContext)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -92,6 +120,32 @@ class SyncManager private constructor(context: Context) {
         return itemIdMap[id] ?: id
     }
 
+    suspend fun retryAllFailed() {
+        withContext(Dispatchers.IO) {
+            dao.retryAllFailed()
+            syncPendingActions()
+        }
+    }
+
+    suspend fun retryAction(id: Long) {
+        withContext(Dispatchers.IO) {
+            dao.retryAction(id)
+            syncPendingActions()
+        }
+    }
+
+    suspend fun deleteAction(id: Long) {
+        withContext(Dispatchers.IO) {
+            dao.deleteById(id)
+        }
+    }
+
+    suspend fun clearFailedActions() {
+        withContext(Dispatchers.IO) {
+            dao.clearFailedActions()
+        }
+    }
+
     suspend fun clearPendingQueue() {
         withContext(Dispatchers.IO) {
             dao.clearAll()
@@ -102,8 +156,34 @@ class SyncManager private constructor(context: Context) {
     }
 
     /**
+     * Resolve Table conflict by reassigning to a new table and retrying.
+     */
+    suspend fun reassignConflictTable(actionId: Long, newTableId: String) {
+        withContext(Dispatchers.IO) {
+            val item = dao.getActionById(actionId) ?: return@withContext
+            try {
+                @Suppress("UNCHECKED_CAST")
+                val payload = (mapAdapter.fromJson(item.payloadJson) as? Map<String, Any?>)?.toMutableMap() ?: mutableMapOf()
+                payload["tableId"] = newTableId
+                val updatedJson = mapAdapter.toJson(payload)
+                val updated = item.copy(
+                    orderId = "TABLE-$newTableId",
+                    payloadJson = updatedJson,
+                    status = "PENDING",
+                    retryCount = 0,
+                    lastErrorMessage = null,
+                    updatedAt = System.currentTimeMillis()
+                )
+                dao.updatePendingAction(updated)
+                syncPendingActions()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    /**
      * True when this table/order still has queued offline actions not yet synced.
-     * Used to avoid polling overwrite wiping local items before sync finishes.
      */
     suspend fun hasPendingForTable(tableId: String?, orderId: String? = null): Boolean {
         return withContext(Dispatchers.IO) {
@@ -149,40 +229,92 @@ class SyncManager private constructor(context: Context) {
 
     fun syncPendingActions() {
         scope.launch {
-            if (_isSyncing.value) return@launch
-            _isSyncing.value = true
-            try {
-                prepareQueueForSync()
-                val pendingList = dao.getAllPendingActions()
-                for (item in pendingList) {
-                    val result = processItem(item)
-                    when (result) {
-                        SyncResult.SUCCESS -> dao.deletePendingAction(item)
-                        SyncResult.RETRY_LATER -> {
-                            val next = item.copy(retryCount = item.retryCount + 1)
-                            dao.updatePendingAction(next)
-                            if (next.retryCount >= MAX_RETRIES) {
-                                dao.deletePendingAction(next)
-                                continue
-                            }
-                            // Dependency not ready — stop this pass so order stays FIFO
-                            break
-                        }
-                        SyncResult.DROP -> dao.deletePendingAction(item)
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                _isSyncing.value = false
-            }
+            runPendingSyncPass()
         }
     }
 
     /**
+     * Direct execution pass used by WorkManager or Foreground triggers.
+     * Returns true if all pending items synced successfully.
+     */
+    suspend fun runPendingSyncPassDirect(): Boolean {
+        return runPendingSyncPass()
+    }
+
+    private suspend fun runPendingSyncPass(): Boolean = withContext(Dispatchers.IO) {
+        if (_isSyncing.value) return@withContext false
+        _isSyncing.value = true
+        var allSuccess = true
+        try {
+            prepareQueueForSync()
+            val pendingList = dao.getAllPendingActions()
+            for (item in pendingList) {
+                dao.updateStatus(item.id, "SYNCING", null)
+                val result = processItem(item)
+                when (result) {
+                    is SyncItemResult.Success -> {
+                        notifyActionSynced(item)
+                        dao.deletePendingAction(item)
+                    }
+                    is SyncItemResult.Conflict -> {
+                        allSuccess = false
+                        dao.updateStatus(item.id, "CONFLICT", result.message)
+                    }
+                    is SyncItemResult.RetryLater -> {
+                        allSuccess = false
+                        val nextRetry = item.retryCount + 1
+                        if (nextRetry >= MAX_RETRIES) {
+                            // Don't drop silently! Mark as FAILED for manual review/retry
+                            dao.updateStatus(item.id, "FAILED", result.message ?: "Failed after $MAX_RETRIES retries")
+                        } else {
+                            val next = item.copy(
+                                status = "PENDING",
+                                retryCount = nextRetry,
+                                lastErrorMessage = result.message,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                            dao.updatePendingAction(next)
+                        }
+                        break // Pause current loop to avoid spamming server while unreachable
+                    }
+                    is SyncItemResult.Drop -> {
+                        dao.deletePendingAction(item)
+                    }
+                }
+            }
+            onNetworkSyncCompleteListener?.invoke()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            allSuccess = false
+        } finally {
+            _isSyncing.value = false
+        }
+        allSuccess
+    }
+
+    private suspend fun notifyActionSynced(item: PendingSyncEntity) {
+        val payload = try {
+            @Suppress("UNCHECKED_CAST")
+            mapAdapter.fromJson(item.payloadJson) as? Map<String, Any?>
+        } catch (_: Exception) {
+            null
+        } ?: emptyMap()
+        val tableId = payload["tableId"]?.toString()
+            ?: item.orderId.removePrefix("TABLE-").takeIf { item.orderId.startsWith("TABLE-") }
+        onActionSyncedListener?.invoke(
+            SyncedAction(
+                actionType = item.actionType,
+                orderId = resolveOrderId(item.orderId),
+                tableId = tableId,
+                payload = payload
+            )
+        )
+    }
+
+    /**
      * Long-offline hygiene:
-     * - drop actions older than MAX_AGE_MS
      * - coalesce UPDATE_QTY for same itemId (keep latest only)
+     * - mark actions older than MAX_AGE_MS as FAILED instead of deleting silently
      */
     private suspend fun prepareQueueForSync() {
         val now = System.currentTimeMillis()
@@ -190,7 +322,7 @@ class SyncManager private constructor(context: Context) {
         val latestQtyByItem = mutableMapOf<String, Long>()
         for (row in all) {
             if (now - row.createdAt > MAX_AGE_MS) {
-                dao.deletePendingAction(row)
+                dao.updateStatus(row.id, "FAILED", "Action expired after 7 days offline")
                 continue
             }
             if (row.actionType == "UPDATE_QTY") {
@@ -247,16 +379,16 @@ class SyncManager private constructor(context: Context) {
         dao.remapOrderId(oldOrderId, newOrderId)
     }
 
-    private suspend fun processItem(item: PendingSyncEntity): SyncResult {
+    private suspend fun processItem(item: PendingSyncEntity): SyncItemResult {
         return try {
             @Suppress("UNCHECKED_CAST")
             val payload = remapPayloadIds(
-                (mapAdapter.fromJson(item.payloadJson) as? Map<String, Any?>) ?: return SyncResult.DROP
+                (mapAdapter.fromJson(item.payloadJson) as? Map<String, Any?>) ?: return SyncItemResult.Drop("Invalid JSON payload")
             )
 
             when (item.actionType) {
                 "CREATE_ORDER" -> {
-                    val tableId = payload["tableId"] as? String ?: return SyncResult.DROP
+                    val tableId = payload["tableId"] as? String ?: return SyncItemResult.Drop("Missing tableId")
                     val guestCount = payloadInt(payload["guestCount"], 1)
                     val localOrderId = (payload["localOrderId"] as? String) ?: item.orderId
                     val res = api.createOrder(tableId, guestCount)
@@ -266,24 +398,21 @@ class SyncManager private constructor(context: Context) {
                         if (!serverId.isNullOrBlank()) {
                             rewriteQueuedOrderIds(localOrderId, serverId)
                         }
-                        SyncResult.SUCCESS
+                        SyncItemResult.Success
                     } else {
-                        SyncResult.RETRY_LATER
+                        val err = res.body()?.response?.error.orEmpty()
+                        val code = res.code()
+                        if (code == 409 || err.contains("occupied", true) || err.contains("already in use", true) || err.contains("table busy", true)) {
+                            SyncItemResult.Conflict("Table $tableId is already occupied on the server. Reassign table to proceed.")
+                        } else {
+                            SyncItemResult.RetryLater(err.ifBlank { "HTTP $code failed" })
+                        }
                     }
                 }
                 "ADD_ITEM" -> {
-                    val orderId = resolveOrderId(payload["orderId"] as? String ?: return SyncResult.DROP)
-                    // Still a local ORD- id and no map → wait for CREATE_ORDER
-                    if (orderId.startsWith("ORD-") && !orderIdMap.containsKey(orderId) &&
-                        orderIdMap.values.none { it == orderId }
-                    ) {
-                        // May already be server id shaped differently; only wait if looks offline-local
-                        if (orderId.contains("-") && orderId.removePrefix("ORD-").toIntOrNull() == null) {
-                            // table-based local id — try API anyway
-                        }
-                    }
+                    val orderId = resolveOrderId(payload["orderId"] as? String ?: return SyncItemResult.Drop("Missing orderId"))
                     val guestId = payloadInt(payload["guestId"], 0)
-                    val productId = payload["productId"] as? String ?: return SyncResult.DROP
+                    val productId = payload["productId"] as? String ?: return SyncItemResult.Drop("Missing productId")
                     val quantity = payloadInt(payload["quantity"], 1)
                     val localItemId = payload["localItemId"] as? String
                     val res = api.addItem(
@@ -315,41 +444,40 @@ class SyncManager private constructor(context: Context) {
                         if (!serverOrderId.isNullOrBlank() && serverOrderId != orderId) {
                             rewriteQueuedOrderIds(orderId, serverOrderId)
                         }
-                        SyncResult.SUCCESS
+                        SyncItemResult.Success
                     } else {
                         val err = res.body()?.response?.error.orEmpty()
                         when {
-                            err.contains("required", true) || err.contains("not found", true) -> SyncResult.DROP
-                            err.contains("out of stock", true) -> SyncResult.DROP
-                            else -> SyncResult.RETRY_LATER
+                            err.contains("required", true) || err.contains("not found", true) -> SyncItemResult.Drop(err)
+                            err.contains("out of stock", true) -> SyncItemResult.Drop("Product out of stock on server")
+                            else -> SyncItemResult.RetryLater(err.ifBlank { "Add item failed" })
                         }
                     }
                 }
                 "UPDATE_QTY" -> {
-                    val rawItemId = payload["itemId"] as? String ?: return SyncResult.DROP
+                    val rawItemId = payload["itemId"] as? String ?: return SyncItemResult.Drop("Missing itemId")
                     val itemId = resolveItemId(rawItemId)
-                    // Still offline-local id → wait until ADD_ITEM maps it
                     if (itemId.startsWith("ITEM-") && itemId == rawItemId && !itemIdMap.containsKey(rawItemId)) {
-                        return SyncResult.RETRY_LATER
+                        return SyncItemResult.RetryLater("Waiting for server item ID mapping")
                     }
                     val newQty = payloadInt(payload["newQty"], 1)
                     val res = if (newQty <= 0) api.deleteItem(itemId) else api.updateItem(itemId, newQty)
                     if (res.isSuccessful && res.body()?.response?.status == "SUCCESS") {
-                        SyncResult.SUCCESS
+                        SyncItemResult.Success
                     } else {
                         val err = res.body()?.response?.error.orEmpty()
                         if (err.contains("not found", true) || err.contains("cancelled", true)) {
-                            SyncResult.DROP
+                            SyncItemResult.Drop(err)
                         } else {
-                            SyncResult.RETRY_LATER
+                            SyncItemResult.RetryLater(err.ifBlank { "Update quantity failed" })
                         }
                     }
                 }
                 "UPDATE_ITEM" -> {
-                    val rawItemId = payload["itemId"] as? String ?: return SyncResult.DROP
+                    val rawItemId = payload["itemId"] as? String ?: return SyncItemResult.Drop("Missing itemId")
                     val itemId = resolveItemId(rawItemId)
                     if (itemId.startsWith("ITEM-") && itemId == rawItemId && !itemIdMap.containsKey(rawItemId)) {
-                        return SyncResult.RETRY_LATER
+                        return SyncItemResult.RetryLater("Waiting for server item ID mapping")
                     }
                     val res = api.updateItem(
                         itemId = itemId,
@@ -364,72 +492,70 @@ class SyncManager private constructor(context: Context) {
                         specialInstructions = payload["specialInstructions"] as? String
                     )
                     if (res.isSuccessful && res.body()?.response?.status == "SUCCESS") {
-                        SyncResult.SUCCESS
+                        SyncItemResult.Success
                     } else {
                         val err = res.body()?.response?.error.orEmpty()
                         when {
-                            err.contains("not found", true) || err.contains("cancelled", true) -> SyncResult.DROP
-                            err.contains("already", true) || err.contains("ready", true) || err.contains("served", true) -> SyncResult.DROP
-                            else -> SyncResult.RETRY_LATER
+                            err.contains("not found", true) || err.contains("cancelled", true) -> SyncItemResult.Drop(err)
+                            err.contains("already", true) || err.contains("ready", true) || err.contains("served", true) -> SyncItemResult.Drop(err)
+                            else -> SyncItemResult.RetryLater(err.ifBlank { "Update item customization failed" })
                         }
                     }
                 }
                 "SEND_KOT" -> {
-                    val orderId = resolveOrderId(payload["orderId"] as? String ?: return SyncResult.DROP)
+                    val orderId = resolveOrderId(payload["orderId"] as? String ?: return SyncItemResult.Drop("Missing orderId"))
                     val res = api.updateKotStatus(orderId)
                     if (res.isSuccessful && res.body()?.response?.status == "SUCCESS") {
-                        SyncResult.SUCCESS
+                        SyncItemResult.Success
                     } else {
                         val err = res.body()?.response?.error.orEmpty()
-                        // Already sent / no pending — treat as done (multi-device / double tap)
                         if (err.contains("no pending", true) || err.contains("already", true)
                             || err.contains("idempotent", true) || err.isBlank()
                         ) {
-                            SyncResult.SUCCESS
+                            SyncItemResult.Success
                         } else if (err.contains("not found", true)) {
-                            SyncResult.DROP
+                            SyncItemResult.Drop(err)
                         } else {
-                            SyncResult.RETRY_LATER
+                            SyncItemResult.RetryLater(err.ifBlank { "Send KOT failed" })
                         }
                     }
                 }
                 "FINALIZE_ORDER" -> {
-                    val orderId = resolveOrderId(payload["orderId"] as? String ?: return SyncResult.DROP)
+                    val orderId = resolveOrderId(payload["orderId"] as? String ?: return SyncItemResult.Drop("Missing orderId"))
                     val res = api.finalizeOrder(orderId)
                     if (res.isSuccessful && res.body()?.response?.status == "SUCCESS") {
-                        SyncResult.SUCCESS
+                        SyncItemResult.Success
                     } else {
                         val err = res.body()?.response?.error.orEmpty()
-                        // Another device already billed / completed
                         if (err.contains("already", true) || err.contains("completed", true)
                             || err.contains("finalized", true) || err.contains("not found", true)
                         ) {
-                            SyncResult.DROP
+                            SyncItemResult.Drop(err)
                         } else {
-                            SyncResult.RETRY_LATER
+                            SyncItemResult.RetryLater(err.ifBlank { "Finalize order failed" })
                         }
                     }
                 }
                 "FREE_TABLE" -> {
-                    val tableId = payload["tableId"] as? String ?: return SyncResult.DROP
+                    val tableId = payload["tableId"] as? String ?: return SyncItemResult.Drop("Missing tableId")
                     val res = api.freeTable(tableId)
                     if (res.isSuccessful && res.body()?.response?.status == "SUCCESS") {
-                        SyncResult.SUCCESS
+                        SyncItemResult.Success
                     } else {
                         val err = res.body()?.response?.error.orEmpty()
                         if (err.contains("already", true) || err.contains("available", true)
                             || err.contains("not found", true)
                         ) {
-                            SyncResult.DROP
+                            SyncItemResult.Drop(err)
                         } else {
-                            SyncResult.RETRY_LATER
+                            SyncItemResult.RetryLater(err.ifBlank { "Free table failed" })
                         }
                     }
                 }
                 "RESERVE_TABLE" -> {
-                    val tableId = payload["tableId"] as? String ?: return SyncResult.DROP
-                    val reservedBy = payload["reservedBy"] as? String ?: return SyncResult.DROP
-                    val reservedUntil = payload["reservedUntil"] as? String ?: return SyncResult.DROP
+                    val tableId = payload["tableId"] as? String ?: return SyncItemResult.Drop("Missing tableId")
+                    val reservedBy = payload["reservedBy"] as? String ?: return SyncItemResult.Drop("Missing reservedBy")
+                    val reservedUntil = payload["reservedUntil"] as? String ?: return SyncItemResult.Drop("Missing reservedUntil")
                     val reservedNote = payload["reservedNote"] as? String
                     val updateExisting = payloadInt(payload["updateExisting"], 0)
                     val res = api.reserveTable(
@@ -440,24 +566,30 @@ class SyncManager private constructor(context: Context) {
                         updateExisting = updateExisting
                     )
                     if (res.isSuccessful && res.body()?.response?.status == "SUCCESS") {
-                        SyncResult.SUCCESS
+                        SyncItemResult.Success
                     } else {
-                        SyncResult.RETRY_LATER
+                        val err = res.body()?.response?.error.orEmpty()
+                        val code = res.code()
+                        if (code == 409 || err.contains("occupied", true) || err.contains("already reserved", true)) {
+                            SyncItemResult.Conflict("Table $tableId is already reserved/occupied on the server")
+                        } else {
+                            SyncItemResult.RetryLater(err.ifBlank { "Reserve table failed" })
+                        }
                     }
                 }
                 "UNRESERVE_TABLE" -> {
-                    val tableId = payload["tableId"] as? String ?: return SyncResult.DROP
+                    val tableId = payload["tableId"] as? String ?: return SyncItemResult.Drop("Missing tableId")
                     val res = api.unreserveTable(tableId)
                     if (res.isSuccessful && res.body()?.response?.status == "SUCCESS") {
-                        SyncResult.SUCCESS
+                        SyncItemResult.Success
                     } else {
-                        SyncResult.DROP
+                        SyncItemResult.Drop("Unreserve table dropped")
                     }
                 }
-                else -> SyncResult.DROP
+                else -> SyncItemResult.Drop("Unknown action type")
             }
         } catch (e: Exception) {
-            SyncResult.RETRY_LATER
+            SyncItemResult.RetryLater(e.localizedMessage ?: "Unknown network error")
         }
     }
 
@@ -503,10 +635,11 @@ class SyncManager private constructor(context: Context) {
         }
     }
 
-    private enum class SyncResult {
-        SUCCESS,
-        RETRY_LATER,
-        DROP
+    private sealed class SyncItemResult {
+        object Success : SyncItemResult()
+        data class RetryLater(val message: String?) : SyncItemResult()
+        data class Conflict(val message: String) : SyncItemResult()
+        data class Drop(val reason: String) : SyncItemResult()
     }
 
     companion object {
@@ -514,8 +647,8 @@ class SyncManager private constructor(context: Context) {
         private const val KEY_ORDER_MAP = "order_id_map"
         private const val KEY_ITEM_MAP = "item_id_map"
         private const val MAX_RETRIES = 8
-        /** Drop queued actions older than 72h (stale long-offline). */
-        private const val MAX_AGE_MS = 72L * 60L * 60L * 1000L
+        /** Drop queued actions older than 7 days (stale long-offline). Order JSON kept in sma_res_orders. */
+        private const val MAX_AGE_MS = 7L * 24L * 60L * 60L * 1000L
 
         @Volatile
         private var INSTANCE: SyncManager? = null
@@ -527,3 +660,10 @@ class SyncManager private constructor(context: Context) {
         }
     }
 }
+
+data class SyncedAction(
+    val actionType: String,
+    val orderId: String?,
+    val tableId: String?,
+    val payload: Map<String, Any?>
+)
