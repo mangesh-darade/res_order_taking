@@ -350,40 +350,7 @@ fun LoginScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Bottom Links Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = onNavigateToForgotPassword,
-                            enabled = uiState.isSetupComplete,
-                            modifier = Modifier.testTag("forgot_password_button")
-                        ) {
-                            Text(
-                                text = "Forgot Password?",
-                                fontSize = 12.sp,
-                                color = if (uiState.isSetupComplete) PinkPrimary else TextMuted,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-
-                        TextButton(
-                            onClick = onNavigateToRegisterInfo,
-                            enabled = uiState.isSetupComplete,
-                            modifier = Modifier.testTag("register_info_button")
-                        ) {
-                            Text(
-                                text = "Create Account",
-                                fontSize = 12.sp,
-                                color = if (uiState.isSetupComplete) PinkPrimary else TextMuted,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
+                    Spacer(modifier = Modifier.height(10.dp))
                 }
             }
         }
@@ -394,7 +361,7 @@ fun LoginScreen(
                 onSetupSaved = {
                     showSettingsDialog = false
                     viewModel.refreshSetupState(context)
-                    Toast.makeText(context, "Server configured. You can login or create account.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "Server configured. You can log in now.", Toast.LENGTH_SHORT).show()
                 }
             )
         }
