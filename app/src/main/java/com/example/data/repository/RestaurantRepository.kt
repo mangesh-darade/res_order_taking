@@ -3,12 +3,18 @@ package com.example.data.repository
 import android.content.Context
 import com.example.data.api.ApiClient
 import com.example.data.api.RestaurantApiService
+import com.example.data.local.MenuCache
+import com.example.data.local.OrderCache
 import com.example.data.model.*
 import com.example.data.sync.SyncManager
+import com.example.data.sync.SyncedAction
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class RestaurantRepository private constructor() {
@@ -24,16 +30,101 @@ class RestaurantRepository private constructor() {
         }
 
         operator fun invoke(): RestaurantRepository = getInstance()
+
+        private const val MIN_FLOOR_SYNC_MS = 5L * 60L * 1000L
+        private const val MIN_CATALOG_SYNC_MS = 30L * 60L * 1000L
     }
 
     private val api: RestaurantApiService
         get() = ApiClient.service
 
     private var syncManager: SyncManager? = null
+    private var menuCache: MenuCache? = null
+    private var orderCache: OrderCache? = null
+    private var syncListenersAttached = false
+    private val repoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun initSyncManager(context: Context) {
+        initLocalStorage(context)
+    }
+
+    fun initLocalStorage(context: Context) {
+        val appContext = context.applicationContext
         if (syncManager == null) {
-            syncManager = SyncManager.getInstance(context)
+            syncManager = SyncManager.getInstance(appContext)
+        }
+        if (menuCache == null) {
+            menuCache = MenuCache(appContext)
+        }
+        if (orderCache == null) {
+            orderCache = OrderCache(appContext)
+        }
+        attachSyncListeners()
+        repoScope.launch {
+            loadPersistedState()
+        }
+    }
+
+    fun isOnline(): Boolean = syncManager?.isOnline?.value == true
+
+    private fun attachSyncListeners() {
+        if (syncListenersAttached) return
+        syncListenersAttached = true
+        syncManager?.setOnActionSyncedListener { action ->
+            handleSyncedAction(action)
+        }
+        syncManager?.setOnNetworkSyncCompleteListener {
+            refreshAfterNetworkSync()
+        }
+    }
+
+    private suspend fun loadPersistedState() {
+        val savedOrders = orderCache?.getActiveOrders().orEmpty()
+        if (savedOrders.isNotEmpty()) {
+            _orders.value = savedOrders
+        }
+        val sections = menuCache?.getSections().orEmpty()
+        if (sections.isNotEmpty()) {
+            _sections.value = sections
+        }
+        val categories = menuCache?.getCategories().orEmpty()
+        if (categories.isNotEmpty()) {
+            _categories.value = categories
+        }
+    }
+
+    private suspend fun handleSyncedAction(action: SyncedAction) {
+        when (action.actionType) {
+            "CREATE_ORDER" -> {
+                val localId = action.payload["localOrderId"]?.toString().orEmpty()
+                val serverId = action.orderId.orEmpty()
+                if (localId.isNotBlank() && serverId.isNotBlank() && localId != serverId) {
+                    orderCache?.remapOrderId(localId, serverId)
+                    _orders.value = _orders.value.map { order ->
+                        if (order.orderId == localId) order.copy(orderId = serverId) else order
+                    }
+                }
+            }
+            "FINALIZE_ORDER" -> {
+                action.orderId?.let { orderCache?.deleteOrder(it) }
+            }
+            "FREE_TABLE" -> {
+                action.tableId?.let { orderCache?.deleteOrdersForTable(it) }
+            }
+        }
+    }
+
+    /** After pending queue drains: light refresh — no hammering API. */
+    private suspend fun refreshAfterNetworkSync() {
+        if (!isOnline()) return
+        syncFloorPlanIfOnline(force = false)
+        syncMenuCatalogIfOnline(force = false)
+        val pending = syncManager?.getPendingCount() ?: 0
+        if (pending > 0) return
+        for (order in _orders.value) {
+            val tableId = order.tableId ?: continue
+            if (syncManager?.hasPendingForTable(tableId, order.orderId) == true) continue
+            fetchOrderBootstrap(tableId = tableId, orderId = order.orderId)
         }
     }
 
@@ -72,61 +163,201 @@ class RestaurantRepository private constructor() {
     }
 
     suspend fun fetchSections(): Result<List<Section>> = withContext(Dispatchers.IO) {
+        val cache = menuCache
+        val local = cache?.getSections().orEmpty()
+        if (local.isNotEmpty()) {
+            _sections.value = local
+        }
+        if (!isOnline()) {
+            if (local.isNotEmpty()) return@withContext Result.success(local)
+            return@withContext Result.success(_sections.value)
+        }
         try {
             val response = api.getSections()
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
                 val data = response.body()?.data ?: emptyList()
-                _sections.value = data
-                return@withContext Result.success(data)
+                if (data.isNotEmpty()) {
+                    cache?.saveSections(data)
+                    _sections.value = data
+                    return@withContext Result.success(data)
+                }
             }
-        } catch (e: Exception) {
-            // Error
+        } catch (_: Exception) {
+        }
+        if (local.isNotEmpty()) {
+            return@withContext Result.success(local)
         }
         Result.success(_sections.value)
     }
 
     suspend fun fetchSubsections(sectionId: String): Result<List<Subsection>> = withContext(Dispatchers.IO) {
+        val cache = menuCache
+        val local = cache?.getSubsections(sectionId).orEmpty()
+        if (local.isNotEmpty()) {
+            _subsections.value = _subsections.value.filter { it.sectionId != sectionId } + local
+        }
+        if (!isOnline()) {
+            if (local.isNotEmpty()) return@withContext Result.success(local)
+            return@withContext Result.success(_subsections.value.filter { it.sectionId == sectionId })
+        }
         try {
             val response = api.getSubsections(sectionId)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
                 val data = response.body()?.data ?: emptyList()
+                cache?.saveSubsections(sectionId, data)
                 _subsections.value = _subsections.value.filter { it.sectionId != sectionId } + data
                 return@withContext Result.success(data)
             }
-        } catch (e: Exception) {
-            // Error
+        } catch (_: Exception) {
+        }
+        if (local.isNotEmpty()) {
+            return@withContext Result.success(local)
         }
         Result.success(_subsections.value.filter { it.sectionId == sectionId })
     }
 
     suspend fun fetchTables(sectionId: String, subsectionId: String? = null): Result<List<TableItem>> = withContext(Dispatchers.IO) {
+        val cache = menuCache
+        val local = cache?.getTables(sectionId, subsectionId).orEmpty()
+        if (local.isNotEmpty()) {
+            val merged = mergeTablesWithMemory(local)
+            _tables.value = merged
+        }
+        if (!isOnline()) {
+            if (local.isNotEmpty()) {
+                return@withContext Result.success(mergeTablesWithMemory(local))
+            }
+            val filtered = _tables.value.filter {
+                (it.sectionId == null || it.sectionId == sectionId) &&
+                    (subsectionId == null || it.subsectionId == null || it.subsectionId == subsectionId)
+            }
+            return@withContext Result.success(filtered)
+        }
         try {
             val response = api.getTables(sectionId, subsectionId)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
                 val data = response.body()?.data ?: emptyList()
-                _tables.value = data
-                return@withContext Result.success(data)
+                if (data.isNotEmpty()) {
+                    cache?.upsertTables(data)
+                    _tables.value = data
+                    return@withContext Result.success(data)
+                }
             }
-        } catch (e: Exception) {
-            // Error
+        } catch (_: Exception) {
+        }
+        if (local.isNotEmpty()) {
+            return@withContext Result.success(mergeTablesWithMemory(local))
         }
         val filtered = _tables.value.filter {
             (it.sectionId == null || it.sectionId == sectionId) &&
-            (subsectionId == null || it.subsectionId == null || it.subsectionId == subsectionId)
+                (subsectionId == null || it.subsectionId == null || it.subsectionId == subsectionId)
         }
         Result.success(filtered)
     }
 
+    /**
+     * Pull sections, subsections and tables into Room (online only).
+     */
+    suspend fun syncFloorPlanIfOnline(force: Boolean = false): Result<Unit> = withContext(Dispatchers.IO) {
+        val cache = menuCache ?: return@withContext Result.failure(Exception("Menu cache not initialized"))
+        if (!isOnline()) {
+            return@withContext Result.failure(Exception("Offline"))
+        }
+        if (!force) {
+            val last = cache.getLastFloorSyncAt()
+            if (System.currentTimeMillis() - last < MIN_FLOOR_SYNC_MS) {
+                return@withContext Result.success(Unit)
+            }
+        }
+        try {
+            val secResponse = api.getSections()
+            if (!secResponse.isSuccessful || secResponse.body()?.response?.status != "SUCCESS") {
+                return@withContext Result.failure(Exception("Failed to sync sections"))
+            }
+            val sections = secResponse.body()?.data ?: emptyList()
+            if (sections.isEmpty()) {
+                return@withContext Result.success(Unit)
+            }
+            cache.saveSections(sections)
+            _sections.value = sections
+
+            val allTables = mutableListOf<TableItem>()
+            for (section in sections) {
+                val subResponse = api.getSubsections(section.id)
+                if (subResponse.isSuccessful && subResponse.body()?.response?.status == "SUCCESS") {
+                    val subs = subResponse.body()?.data ?: emptyList()
+                    cache.saveSubsections(section.id, subs)
+                    _subsections.value = _subsections.value.filter { it.sectionId != section.id } + subs
+
+                    val tablesNoSub = api.getTables(section.id, null)
+                    if (tablesNoSub.isSuccessful && tablesNoSub.body()?.response?.status == "SUCCESS") {
+                        tablesNoSub.body()?.data?.let { allTables.addAll(it) }
+                    }
+                    for (sub in subs) {
+                        val tablesSub = api.getTables(section.id, sub.id)
+                        if (tablesSub.isSuccessful && tablesSub.body()?.response?.status == "SUCCESS") {
+                            tablesSub.body()?.data?.let { allTables.addAll(it) }
+                        }
+                    }
+                }
+            }
+            if (allTables.isNotEmpty()) {
+                cache.upsertTables(allTables.distinctBy { it.id })
+                _tables.value = allTables.distinctBy { it.id }
+            }
+            cache.markFloorPlanSynced()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun mergeTablesWithMemory(cached: List<TableItem>): List<TableItem> {
+        if (_tables.value.isEmpty()) {
+            return cached
+        }
+        val memoryById = _tables.value.associateBy { it.id }
+        return cached.map { row ->
+            memoryById[row.id] ?: row
+        }
+    }
+
     suspend fun fetchOrderBootstrap(tableId: String?, orderId: String? = null): Result<OrderBootstrap> = withContext(Dispatchers.IO) {
-        // Fallback memory state lookup: only pick active (non-finalized) order for table
         var existingOrder = _orders.value.find {
             (orderId != null && it.orderId == orderId) ||
             (tableId != null && it.tableId == tableId && it.status != "finalized" && it.status != "completed")
+        }
+        if (existingOrder == null && !orderId.isNullOrBlank()) {
+            existingOrder = orderCache?.getOrder(orderId)
+        }
+        if (existingOrder == null && !tableId.isNullOrBlank()) {
+            existingOrder = orderCache?.getOrderByTableId(tableId)
+        }
+        if (existingOrder != null && _orders.value.none {
+                it.orderId == existingOrder?.orderId ||
+                    (!tableId.isNullOrBlank() && it.tableId == tableId)
+            }
+        ) {
+            existingOrder = updateLocalOrder(existingOrder)
         }
 
         val pendingForThis = syncManager?.hasPendingForTable(tableId, orderId ?: existingOrder?.orderId) == true
         if (pendingForThis && existingOrder != null) {
             return@withContext Result.success(existingOrder)
+        }
+
+        if (!isOnline()) {
+            if (existingOrder != null) {
+                return@withContext Result.success(existingOrder)
+            }
+            if (tableId != null) {
+                val fromTable = orderCache?.getOrderByTableId(tableId)
+                if (fromTable != null) {
+                    return@withContext Result.success(updateLocalOrder(fromTable))
+                }
+            }
+            val resultOrder = existingOrder ?: OrderBootstrap(tableId = tableId ?: "1", tableNumber = "T-1")
+            return@withContext Result.success(updateLocalOrder(resultOrder))
         }
 
         try {
@@ -264,30 +495,115 @@ class RestaurantRepository private constructor() {
         Result.success(normalized)
     }
 
+    /**
+     * Pull full menu catalog from API into Room (online only).
+     * Safe to call on menu open / app start.
+     */
+    suspend fun syncMenuCatalogIfOnline(force: Boolean = false): Result<Unit> = withContext(Dispatchers.IO) {
+        val cache = menuCache ?: return@withContext Result.failure(Exception("Menu cache not initialized"))
+        if (!isOnline()) {
+            return@withContext Result.failure(Exception("Offline"))
+        }
+        if (!force) {
+            val last = cache.getLastCatalogSyncAt()
+            if (System.currentTimeMillis() - last < MIN_CATALOG_SYNC_MS) {
+                return@withContext Result.success(Unit)
+            }
+        }
+        try {
+            val catResponse = api.getMenuCategories()
+            if (catResponse.isSuccessful && catResponse.body()?.response?.status == "SUCCESS") {
+                val categories = catResponse.body()?.data ?: emptyList()
+                if (categories.isNotEmpty()) {
+                    cache.saveCategories(categories)
+                    _categories.value = categories
+                }
+            }
+            val itemResponse = api.getMenuItems(categoryId = null, mealType = null, search = null)
+            if (itemResponse.isSuccessful && itemResponse.body()?.response?.status == "SUCCESS") {
+                val items = itemResponse.body()?.data ?: emptyList()
+                if (items.isNotEmpty()) {
+                    cache.replaceAllItems(items)
+                    _menuItems.value = items
+                    cache.markCatalogSynced()
+                }
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun fetchMenuCategories(): Result<List<MenuCategory>> = withContext(Dispatchers.IO) {
+        val cache = menuCache
+        val local = cache?.getCategories().orEmpty()
+        if (local.isNotEmpty()) {
+            _categories.value = local
+        }
+        if (!isOnline()) {
+            if (local.isNotEmpty()) return@withContext Result.success(local)
+            return@withContext Result.success(_categories.value)
+        }
         try {
             val response = api.getMenuCategories()
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
                 val data = response.body()?.data ?: emptyList()
-                _categories.value = data
-                return@withContext Result.success(data)
+                if (data.isNotEmpty()) {
+                    cache?.saveCategories(data)
+                    _categories.value = data
+                    return@withContext Result.success(data)
+                }
             }
-        } catch (e: Exception) {
-            // Error
+        } catch (_: Exception) {
+        }
+        if (local.isNotEmpty()) {
+            return@withContext Result.success(local)
         }
         Result.success(_categories.value)
     }
 
     suspend fun fetchMenuItems(categoryId: String? = null, mealType: String? = null, search: String? = null): Result<List<MenuItem>> = withContext(Dispatchers.IO) {
+        val cache = menuCache
+        val local = cache?.getItems(categoryId, mealType, search).orEmpty()
+        if (local.isNotEmpty()) {
+            _menuItems.value = local
+        }
+        val isFullCatalogFetch = categoryId.isNullOrBlank()
+            && (mealType.isNullOrBlank() || mealType.equals("all", ignoreCase = true))
+            && search.isNullOrBlank()
+        if (!isOnline()) {
+            if (local.isNotEmpty()) return@withContext Result.success(local)
+            var list = _menuItems.value
+            if (!categoryId.isNullOrBlank()) {
+                list = list.filter { it.categoryId == categoryId }
+            }
+            if (!mealType.isNullOrBlank() && mealType != "all") {
+                list = list.filter { it.vegType.equals(mealType, ignoreCase = true) }
+            }
+            if (!search.isNullOrBlank()) {
+                list = list.filter { it.name.contains(search, ignoreCase = true) }
+            }
+            return@withContext Result.success(list)
+        }
         try {
             val response = api.getMenuItems(categoryId, mealType, search)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
                 val data = response.body()?.data ?: emptyList()
-                _menuItems.value = data
-                return@withContext Result.success(data)
+                if (data.isNotEmpty()) {
+                    if (isFullCatalogFetch) {
+                        cache?.replaceAllItems(data)
+                        cache?.markCatalogSynced()
+                    } else {
+                        cache?.upsertItems(data)
+                    }
+                    _menuItems.value = data
+                    return@withContext Result.success(data)
+                }
             }
-        } catch (e: Exception) {
-            // Error
+        } catch (_: Exception) {
+        }
+        if (local.isNotEmpty()) {
+            return@withContext Result.success(local)
         }
         var list = _menuItems.value
         if (!categoryId.isNullOrBlank()) {
@@ -297,39 +613,53 @@ class RestaurantRepository private constructor() {
             list = list.filter { it.vegType.equals(mealType, ignoreCase = true) }
         }
         if (!search.isNullOrBlank()) {
-            list = list.filter { it.name.contains(search!!, ignoreCase = true) }
+            list = list.filter { it.name.contains(search, ignoreCase = true) }
         }
         Result.success(list)
     }
 
     suspend fun fetchProductCustomizations(productId: String): Result<ProductCustomization> = withContext(Dispatchers.IO) {
+        val cache = menuCache
+        val localCustomization = cache?.getCustomization(productId)
+        if (localCustomization != null) {
+            _customizations.value = _customizations.value + (productId to localCustomization)
+        }
         try {
             val response = api.getProductCustomizations(productId)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
                 response.body()?.data?.let {
+                    cache?.saveCustomization(it)
                     _customizations.value = _customizations.value + (productId to it)
                     return@withContext Result.success(it)
                 }
             }
-        } catch (e: Exception) {
-            // offline: use last cached for this product if any
+        } catch (_: Exception) {
         }
-        // No fake Extra Cheese / demo chips — empty sections hide in UI; masters live in DB
-        val cached = _customizations.value[productId]
-        if (cached != null) {
-            return@withContext Result.success(cached)
+        if (localCustomization != null) {
+            return@withContext Result.success(localCustomization)
         }
-        Result.success(
-            ProductCustomization(
-                productId = productId,
-                addOns = emptyList(),
-                toppings = emptyList(),
-                allergies = emptyList(),
-                meatWellness = emptyList(),
-                spiceLevels = listOf("Mild", "Medium", "Spicy", "Extra Hot")
-            )
-        )
+        val memoryCached = _customizations.value[productId]
+        if (memoryCached != null) {
+            return@withContext Result.success(memoryCached)
+        }
+        Result.success(defaultCustomization(productId))
     }
+
+    suspend fun cacheProductCustomization(customization: ProductCustomization) {
+        withContext(Dispatchers.IO) {
+            menuCache?.saveCustomization(customization)
+            _customizations.value = _customizations.value + (customization.productId to customization)
+        }
+    }
+
+    private fun defaultCustomization(productId: String) = ProductCustomization(
+        productId = productId,
+        addOns = emptyList(),
+        toppings = emptyList(),
+        allergies = emptyList(),
+        meatWellness = emptyList(),
+        spiceLevels = listOf("Mild", "Medium", "Spicy", "Extra Hot")
+    )
 
     suspend fun addAllergy(name: String): Result<CustomizationOption> = withContext(Dispatchers.IO) {
         val trimmed = name.trim()
@@ -699,14 +1029,27 @@ class RestaurantRepository private constructor() {
         try {
             val response = api.finalizeOrder(orderId)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
-                response.body()?.data?.let { return@withContext Result.success(it) }
+                response.body()?.data?.let { data ->
+                    orderCache?.deleteOrder(orderId)
+                    val order = _orders.value.find { it.orderId == orderId }
+                    if (order?.tableId != null) {
+                        updateTableStatus(order.tableId, "available", 0, null)
+                        _orders.value = _orders.value.filterNot { it.tableId == order.tableId || it.orderId == orderId }
+                    } else {
+                        _orders.value = _orders.value.filterNot { it.orderId == orderId }
+                    }
+                    return@withContext Result.success(data)
+                }
             }
         } catch (e: Exception) {
-            // fallback
+            // fallback offline
         }
         val order = _orders.value.find { it.orderId == orderId }
         val grandTotal = order?.grandTotal ?: 0.0
         val saleId = "SALE-${System.currentTimeMillis() % 100000}"
+        if (order != null) {
+            updateLocalOrder(order.copy(status = "finalized"))
+        }
         if (order?.tableId != null) {
             updateTableStatus(order.tableId, "available", 0, null)
             _orders.value = _orders.value.filterNot { it.tableId == order.tableId || it.orderId == orderId }
@@ -727,6 +1070,7 @@ class RestaurantRepository private constructor() {
         try {
             val response = api.freeTable(tableId)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
+                orderCache?.deleteOrdersForTable(tableId)
                 _orders.value = _orders.value.filterNot { it.tableId == tableId }
                 updateTableStatus(tableId, "free", 0, null)
                 return@withContext Result.success(true)
@@ -930,6 +1274,9 @@ class RestaurantRepository private constructor() {
         }
         if (index >= 0) list[index] = normalizedOrder else list.add(normalizedOrder)
         _orders.value = list
+        repoScope.launch {
+            orderCache?.saveOrder(normalizedOrder)
+        }
         return normalizedOrder
     }
 
@@ -943,9 +1290,10 @@ class RestaurantRepository private constructor() {
         reservedNote: String? = null,
         clearReservation: Boolean = newStatus != "reserved"
     ) {
+        var updatedRow: TableItem? = null
         _tables.value = _tables.value.map { t ->
             if (t.id == tableId) {
-                t.copy(
+                val next = t.copy(
                     status = newStatus,
                     guestsCount = guests,
                     orderId = orderId,
@@ -953,7 +1301,16 @@ class RestaurantRepository private constructor() {
                     reservedUntil = if (clearReservation && newStatus != "reserved") null else (reservedUntil ?: t.reservedUntil),
                     reservedNote = if (clearReservation && newStatus != "reserved") null else (reservedNote ?: t.reservedNote)
                 )
-            } else t
+                updatedRow = next
+                next
+            } else {
+                t
+            }
+        }
+        updatedRow?.let { row ->
+            repoScope.launch {
+                menuCache?.upsertTable(row)
+            }
         }
     }
 
