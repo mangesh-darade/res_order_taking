@@ -53,11 +53,11 @@ object Routes {
 fun AppNavigation(
     navController: NavHostController = rememberNavController()
 ) {
-    var currentSectionId by remember { mutableStateOf("1") }
-    var currentSectionName by remember { mutableStateOf("Main Dining") }
-    var currentSubsectionId by remember { mutableStateOf<String?>("101") }
-    var currentSubsectionName by remember { mutableStateOf<String?>("Hall A") }
-    var currentTableId by remember { mutableStateOf<String?>("1") }
+    var currentSectionId by remember { mutableStateOf("") }
+    var currentSectionName by remember { mutableStateOf("") }
+    var currentSubsectionId by remember { mutableStateOf<String?>("") }
+    var currentSubsectionName by remember { mutableStateOf<String?>("") }
+    var currentTableId by remember { mutableStateOf<String?>(null) }
 
     val navigateToLogout = {
         navController.navigate(Routes.LOGIN) {
@@ -148,8 +148,8 @@ fun AppNavigation(
         composable(
             route = Routes.TABLES,
             arguments = listOf(
-                navArgument("secId") { type = NavType.StringType; defaultValue = "1" },
-                navArgument("secName") { type = NavType.StringType; defaultValue = "Main Dining" },
+                navArgument("secId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("secName") { type = NavType.StringType; defaultValue = "" },
                 navArgument("subId") { type = NavType.StringType; defaultValue = "" },
                 navArgument("subName") { type = NavType.StringType; defaultValue = "" }
             )
@@ -186,10 +186,11 @@ fun AppNavigation(
         composable(
             route = Routes.ORDERS,
             arguments = listOf(
-                navArgument("tableId") { type = NavType.StringType; defaultValue = "1" }
+                navArgument("tableId") { type = NavType.StringType; defaultValue = "" }
             )
         ) { backStackEntry ->
-            val tId = backStackEntry.arguments?.getString("tableId") ?: currentTableId ?: "1"
+            val rawTableId = backStackEntry.arguments?.getString("tableId") ?: currentTableId ?: ""
+            val tId = rawTableId.ifBlank { null }
 
             OrdersScreen(
                 initialTableId = tId,

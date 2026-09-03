@@ -181,11 +181,39 @@ fun OrdersScreen(
                         .padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "Please select a table to view or take orders.",
-                        fontSize = 16.sp,
-                        color = TextMuted
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GridView,
+                            contentDescription = null,
+                            tint = Color.Gray.copy(alpha = 0.4f),
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "No Table Selected",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextDark
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Please select a table from the Tables screen to start or view an order.",
+                            fontSize = 13.sp,
+                            color = TextMuted,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = { onTabSelected(MainTab.TABLES) },
+                            colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Go to Tables")
+                        }
+                    }
                 }
             } else {
                 Column(
@@ -219,8 +247,10 @@ fun OrdersScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                val rawTable = order.tableNumber ?: uiState.tableId ?: ""
+                                val displayTable = if (rawTable.startsWith("Table", ignoreCase = true)) rawTable else "Table $rawTable"
                                 Text(
-                                    text = "Table ${order.tableNumber ?: uiState.tableId}",
+                                    text = displayTable,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = TextDark
@@ -237,8 +267,9 @@ fun OrdersScreen(
                                 onDismissRequest = { tableDropdownExpanded = false }
                             ) {
                                 uiState.tablesList.forEach { tbl ->
+                                    val itemLabel = if (tbl.tableNumber.startsWith("Table", ignoreCase = true)) tbl.tableNumber else "Table ${tbl.tableNumber}"
                                     DropdownMenuItem(
-                                        text = { Text("Table ${tbl.tableNumber}") },
+                                        text = { Text(itemLabel) },
                                         onClick = {
                                             tableDropdownExpanded = false
                                             viewModel.setTableId(tbl.id)

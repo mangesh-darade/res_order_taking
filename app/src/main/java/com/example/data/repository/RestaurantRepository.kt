@@ -380,34 +380,39 @@ class RestaurantRepository private constructor() {
             // fallback
         }
 
-        if (existingOrder == null && tableId != null) {
-            val table = _tables.value.find { it.id == tableId }
-            val newOrderId = "ORD-$tableId-${System.currentTimeMillis() % 10000}"
-            val section = _sections.value.find { it.id == table?.sectionId }
-            val subsection = _subsections.value.find { it.id == table?.subsectionId }
-            val initialGuestCount = maxOf(table?.guestsCount ?: 2, 2)
-            val initialGuests = (1..initialGuestCount).map { gId ->
-                GuestOrder(guestId = gId, guestName = "Guest $gId", items = emptyList())
+        if (existingOrder == null && !tableId.isNullOrBlank()) {
+            val table = _tables.value.find { it.id == tableId } ?: menuCache?.getTables("", null)?.find { it.id == tableId }
+            if (table != null) {
+                val newOrderId = "ORD-$tableId-${System.currentTimeMillis() % 10000}"
+                val section = _sections.value.find { it.id == table.sectionId }
+                val subsection = _subsections.value.find { it.id == table.subsectionId }
+                val initialGuestCount = maxOf(table.guestsCount ?: 2, 2)
+                val initialGuests = (1..initialGuestCount).map { gId ->
+                    GuestOrder(guestId = gId, guestName = "Guest $gId", items = emptyList())
+                }
+                existingOrder = OrderBootstrap(
+                    orderId = newOrderId,
+                    tableId = tableId,
+                    tableNumber = table.tableNumber,
+                    sectionName = section?.name ?: "",
+                    subsectionName = subsection?.name ?: "",
+                    guestCount = initialGuestCount,
+                    status = "active",
+                    guests = initialGuests,
+                    totalItems = 0,
+                    grandTotal = 0.0
+                )
+                val normalized = updateLocalOrder(existingOrder)
+                return@withContext Result.success(normalized)
             }
-            existingOrder = OrderBootstrap(
-                orderId = newOrderId,
-                tableId = tableId,
-                tableNumber = table?.tableNumber ?: "T-$tableId",
-                sectionName = section?.name ?: "Main Dining",
-                subsectionName = subsection?.name ?: "Hall A",
-                guestCount = initialGuestCount,
-                status = "active",
-                guests = initialGuests,
-                totalItems = 0,
-                grandTotal = 0.0
-            )
+        }
+
+        if (existingOrder != null) {
             val normalized = updateLocalOrder(existingOrder)
             return@withContext Result.success(normalized)
         }
 
-        val resultOrder = existingOrder ?: OrderBootstrap(tableId = tableId ?: "1", tableNumber = "T-1")
-        val normalized = updateLocalOrder(resultOrder)
-        Result.success(normalized)
+        Result.failure(Exception("No active order found for table"))
     }
 
     suspend fun createOrder(tableId: String, guestCount: Int): Result<OrderBootstrap> = withContext(Dispatchers.IO) {

@@ -14,10 +14,10 @@ import kotlinx.coroutines.launch
 
 data class TablesUiState(
     val isLoading: Boolean = false,
-    val sectionId: String = "1",
-    val sectionName: String = "Main Dining",
-    val subsectionId: String? = "101",
-    val subsectionName: String? = "Hall A",
+    val sectionId: String = "",
+    val sectionName: String = "",
+    val subsectionId: String? = null,
+    val subsectionName: String? = null,
     val tables: List<TableItem> = emptyList(),
     val confirmDialogTable: TableItem? = null,
     val reserveDialogTable: TableItem? = null,
@@ -71,8 +71,18 @@ class TablesViewModel(
             if (!silent && _uiState.value.tables.isEmpty()) {
                 _uiState.value = _uiState.value.copy(isLoading = true)
             }
-            val secId = _uiState.value.sectionId
+            var secId = _uiState.value.sectionId
             val subId = _uiState.value.subsectionId
+            if (secId.isBlank()) {
+                val secList = repository.sections.value
+                if (secList.isNotEmpty()) {
+                    secId = secList.first().id
+                    _uiState.value = _uiState.value.copy(
+                        sectionId = secId,
+                        sectionName = secList.first().name
+                    )
+                }
+            }
             val result = repository.fetchTables(secId, subId)
             result.onSuccess { list ->
                 _uiState.value = _uiState.value.copy(

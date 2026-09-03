@@ -75,10 +75,11 @@ fun TablesScreen(
                 onTabSelected = onTabSelected
             )
 
-            val titleText = if (!subsectionName.isNullOrBlank()) {
-                "$sectionName • $subsectionName"
-            } else {
-                "$sectionName • Ground Floor"
+            val titleText = when {
+                sectionName.isNotBlank() && !subsectionName.isNullOrBlank() -> "$sectionName • $subsectionName"
+                sectionName.isNotBlank() -> sectionName
+                uiState.sectionName.isNotBlank() -> uiState.sectionName
+                else -> "All Tables"
             }
 
             Surface(
@@ -174,6 +175,47 @@ fun TablesScreen(
                 if (uiState.isLoading) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = PinkPrimary)
+                    }
+                } else if (uiState.tables.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Schedule,
+                                contentDescription = null,
+                                tint = Color.Gray.copy(alpha = 0.4f),
+                                modifier = Modifier.size(64.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "No Tables Found",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextDark
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "No tables found in this section.\nPlease configure sections and tables in ElintOm POS.",
+                                fontSize = 13.sp,
+                                color = TextMuted,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(
+                                onClick = { viewModel.loadTables(silent = false) },
+                                colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Refresh Tables")
+                            }
+                        }
                     }
                 } else {
                     LazyVerticalGrid(
