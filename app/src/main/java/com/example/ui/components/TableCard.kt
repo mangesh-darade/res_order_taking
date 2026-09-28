@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Restaurant
@@ -39,29 +40,30 @@ fun TableCard(
     val isOrderPlaced = statusLower in listOf("order-placed", "placed", "kitchen", "kot_sent")
     val isReady = statusLower == "ready" || statusLower == "order-ready"
 
-    // Spec colors: Available White, Reserved Yellow, Occupied Blue,
-    // Order Placed Pink, Order Ready Green, Served Pink, Free Red
-    val cardBg = when {
+    // Dynamic DB status colors with fallback
+    val defaultCardBg = when {
         statusLower == "occupied" -> Color(0xFFA2E5FF)
         isOrderPlaced -> Color(0xFFFF7EB6)
         isReady -> Color(0xFFC8E6C9)
-        statusLower == "served" -> Color(0xFFFF7EB6)
+        statusLower == "served" -> Color(0xFFE9D5FF) // Pastel Purple from DB
         statusLower == "reserved" -> Color(0xFFFFFF99)
         statusLower == "free" -> Color(0xFFFFCDD2)
         else -> Color(0xFFFFFFFF) // Available = White
     }
 
-    val isAvailable = statusLower == "available"
-
-    val tableTextColor = when {
+    val defaultTextColor = when {
         statusLower == "occupied" -> Color(0xFF0284C7)
         isOrderPlaced -> Color(0xFFBE185D)
         isReady -> Color(0xFF16A34A)
-        statusLower == "served" -> Color(0xFFBE185D)
+        statusLower == "served" -> Color(0xFF9333EA) // Deep Purple from DB
         statusLower == "reserved" -> Color(0xFF856404)
         statusLower == "free" -> Color(0xFFB71C1C)
         else -> PinkPrimary
     }
+
+    val cardBg = parseHexColorSafely(table.statusColor, defaultCardBg)
+    val tableTextColor = parseHexColorSafely(table.statusTextColor, defaultTextColor)
+    val isAvailable = statusLower == "available"
 
     val displayTime = formatDisplayTime(table.occupiedTime)
     val reservedUntilShort = if (statusLower == "reserved") {
@@ -84,7 +86,7 @@ fun TableCard(
         statusLower == "occupied" -> Icons.Default.Add // Plus (+ Guest)
         isOrderPlaced -> Icons.Default.Add
         isReady -> Icons.Default.Restaurant // Cloche / dish
-        statusLower == "served" -> Icons.Default.Add
+        statusLower == "served" -> Icons.Default.Check
         statusLower == "free" -> Icons.Default.ReceiptLong // Bill
         else -> null
     }
@@ -208,6 +210,17 @@ fun TableCard(
                                 maxLines = 1
                             )
                         }
+                    } else if (!isAvailable) {
+                        val displayStatus = table.statusLabel?.takeIf { it.isNotBlank() }
+                            ?: table.status.replace('-', ' ').replace('_', ' ').uppercase()
+                        Text(
+                            text = displayStatus,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = tableTextColor,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1
+                        )
                     }
                 }
             }
@@ -260,5 +273,18 @@ private fun formatReservedUntilShort(raw: String?): String? {
         outFmt.format(parsed)
     } catch (_: Exception) {
         formatDisplayTime(raw)
+    }
+}
+
+/**
+ * Safely parse hex color string (#RRGGBB or #AARRGGBB) into Compose Color with fallback
+ */
+private fun parseHexColorSafely(hex: String?, fallback: Color): Color {
+    if (hex.isNullOrBlank()) return fallback
+    return try {
+        val colorInt = android.graphics.Color.parseColor(hex.trim())
+        Color(colorInt)
+    } catch (_: Exception) {
+        fallback
     }
 }

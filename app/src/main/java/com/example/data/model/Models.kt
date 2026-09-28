@@ -42,7 +42,10 @@ data class TableItem(
     @Json(name = "order_id") val orderId: String? = null,
     @Json(name = "reserved_by") val reservedBy: String? = null,
     @Json(name = "reserved_until") val reservedUntil: String? = null,
-    @Json(name = "reserved_note") val reservedNote: String? = null
+    @Json(name = "reserved_note") val reservedNote: String? = null,
+    @Json(name = "status_label") val statusLabel: String? = null,
+    @Json(name = "status_color") val statusColor: String? = null,
+    @Json(name = "status_text_color") val statusTextColor: String? = null
 )
 
 @JsonClass(generateAdapter = true)

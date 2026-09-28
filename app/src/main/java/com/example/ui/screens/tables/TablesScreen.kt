@@ -271,20 +271,28 @@ fun TablesScreen(
                     val totalCount = uiState.tables.size
                     val availableCount = statuses.count { it == "available" }
                     val occupiedCount = statuses.count { it == "occupied" }
-                    // Order Placed + Served share pink on cards — one legend chip
-                    val pinkCount = statuses.count {
-                        it in listOf("order-placed", "placed", "kitchen", "kot_sent", "served")
+                    val placedCount = statuses.count {
+                        it in listOf("order-placed", "placed", "kitchen", "kot_sent")
                     }
                     val readyCount = statuses.count { it == "ready" || it == "order-ready" }
+                    val servedCount = statuses.count { it == "served" }
                     val reservedCount = statuses.count { it == "reserved" }
                     val freeCount = statuses.count { it == "free" }
+
+                    // Dynamic colors from DB/API tables with fallback
+                    val occupiedColor = uiState.tables.firstOrNull { it.status.lowercase() == "occupied" }?.statusColor?.let { parseLegendHex(it, Color(0xFFA2E5FF)) } ?: Color(0xFFA2E5FF)
+                    val placedColor = uiState.tables.firstOrNull { it.status.lowercase() in listOf("order-placed", "placed", "kitchen", "kot_sent") }?.statusColor?.let { parseLegendHex(it, Color(0xFFFF7EB6)) } ?: Color(0xFFFF7EB6)
+                    val readyColor = uiState.tables.firstOrNull { it.status.lowercase() in listOf("ready", "order-ready") }?.statusColor?.let { parseLegendHex(it, Color(0xFFC8E6C9)) } ?: Color(0xFFC8E6C9)
+                    val servedColor = uiState.tables.firstOrNull { it.status.lowercase() == "served" }?.statusColor?.let { parseLegendHex(it, Color(0xFFE9D5FF)) } ?: Color(0xFFE9D5FF)
+                    val reservedColor = uiState.tables.firstOrNull { it.status.lowercase() == "reserved" }?.statusColor?.let { parseLegendHex(it, Color(0xFFFFFF99)) } ?: Color(0xFFFFFF99)
+                    val freeColor = uiState.tables.firstOrNull { it.status.lowercase() == "free" }?.statusColor?.let { parseLegendHex(it, Color(0xFFFFCDD2)) } ?: Color(0xFFFFCDD2)
 
                     Row(
                         modifier = Modifier.weight(1f, fill = false),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Colors match TableCard: white / blue / pink / green / yellow / red
+                        // Colors match TableCard & Web Floor View: white / blue / pink / green / purple / yellow / red
                         StatusLegendChip(
                             color = Color.White,
                             count = availableCount,
@@ -292,27 +300,32 @@ fun TablesScreen(
                             bordered = true
                         )
                         StatusLegendChip(
-                            color = Color(0xFFA2E5FF),
+                            color = occupiedColor,
                             count = occupiedCount,
                             total = totalCount
                         )
                         StatusLegendChip(
-                            color = Color(0xFFFF7EB6),
-                            count = pinkCount,
+                            color = placedColor,
+                            count = placedCount,
                             total = totalCount
                         )
                         StatusLegendChip(
-                            color = Color(0xFFC8E6C9),
+                            color = readyColor,
                             count = readyCount,
                             total = totalCount
                         )
                         StatusLegendChip(
-                            color = Color(0xFFFFFF99),
+                            color = servedColor,
+                            count = servedCount,
+                            total = totalCount
+                        )
+                        StatusLegendChip(
+                            color = reservedColor,
                             count = reservedCount,
                             total = totalCount
                         )
                         StatusLegendChip(
-                            color = Color(0xFFFFCDD2),
+                            color = freeColor,
                             count = freeCount,
                             total = totalCount
                         )
@@ -740,6 +753,15 @@ private fun StatusLegendChip(
             fontWeight = FontWeight.Bold,
             color = TextDark
         )
+    }
+}
+
+private fun parseLegendHex(hex: String?, fallback: Color): Color {
+    if (hex.isNullOrBlank()) return fallback
+    return try {
+        Color(android.graphics.Color.parseColor(hex.trim()))
+    } catch (_: Exception) {
+        fallback
     }
 }
 

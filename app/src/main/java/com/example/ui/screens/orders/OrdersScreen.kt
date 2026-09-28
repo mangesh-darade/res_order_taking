@@ -1,6 +1,7 @@
 package com.example.ui.screens.orders
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -634,16 +635,60 @@ fun OrderItemCard(
     val statusLower = item.status?.lowercase()?.trim().orEmpty()
     // KOT+ cancel keeps the row (qty unchanged) and sets status=cancelled — do not expect qty 0
     val isCancelled = statusLower == "cancelled" || statusLower == "canceled"
-    val isReady = statusLower == "ready" || statusLower == "served"
-    val cardBg = when {
-        isCancelled -> Color(0xFFFFEBEE)
-        isReady -> GreenReadyTint.copy(alpha = 0.3f)
-        else -> Color.White
-    }
-    val borderColor = when {
-        isCancelled -> Color(0xFFEF9A9A)
-        isReady -> GreenReadyTint
-        else -> Color(0xFFEEEEEE)
+    val isReady = statusLower == "ready"
+    val isServed = statusLower == "served"
+    val isKot = statusLower == "kot" || statusLower == "preparing" || statusLower == "cooking"
+    val isPending = statusLower == "pending"
+
+    val cardBg: Color
+    val borderColor: Color
+    val badgeBg: Color
+    val badgeText: Color
+    val statusLabel: String
+
+    when {
+        isCancelled -> {
+            cardBg = Color(0xFFFEF2F2)
+            borderColor = Color(0xFFFECACA)
+            badgeBg = Color(0xFFFEE2E2)
+            badgeText = Color(0xFFDC2626)
+            statusLabel = "CANCELLED"
+        }
+        isServed -> {
+            cardBg = Color(0xFFFAF5FF)
+            borderColor = Color(0xFFE9D5FF)
+            badgeBg = Color(0xFFEDE9FE)
+            badgeText = Color(0xFF7C3AED)
+            statusLabel = "SERVED"
+        }
+        isReady -> {
+            cardBg = Color(0xFFF0FDF4)
+            borderColor = Color(0xFFBBF7D0)
+            badgeBg = Color(0xFFDCFCE7)
+            badgeText = Color(0xFF16A34A)
+            statusLabel = "READY"
+        }
+        isKot -> {
+            cardBg = Color(0xFFFDF2F8)
+            borderColor = Color(0xFFFBCFE8)
+            badgeBg = Color(0xFFFCE7F3)
+            badgeText = Color(0xFFDB2777)
+            statusLabel = "PREPARING"
+        }
+        isPending -> {
+            cardBg = Color(0xFFFFFBEB)
+            borderColor = Color(0xFFFDE68A)
+            badgeBg = Color(0xFFFEF3C7)
+            badgeText = Color(0xFFD97706)
+            statusLabel = "PENDING"
+        }
+        else -> {
+            cardBg = Color.White
+            borderColor = Color(0xFFEEEEEE)
+            badgeBg = Color(0xFFF3F4F6)
+            badgeText = Color(0xFF6B7280)
+            statusLabel = if (statusLower.isNotEmpty()) statusLower.uppercase() else ""
+        }
     }
 
     Card(
@@ -687,36 +732,39 @@ fun OrderItemCard(
                     Spacer(modifier = Modifier.width(8.dp))
 
                     Column {
-                        Text(
-                            text = item.productName,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isCancelled) TextMuted else TextDark,
-                            textDecoration = if (isCancelled) TextDecoration.LineThrough else null
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = item.productName,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isCancelled) TextMuted else TextDark,
+                                textDecoration = if (isCancelled) TextDecoration.LineThrough else null
+                            )
+                            if (statusLabel.isNotEmpty()) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = badgeBg,
+                                    border = BorderStroke(1.dp, borderColor)
+                                ) {
+                                    Text(
+                                        text = statusLabel,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = badgeText,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
                         Text(
                             text = CurrencyConfig.format(item.price),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = if (isCancelled) TextMuted else PinkPrimary
                         )
-                        if (isCancelled) {
-                            Text(
-                                text = "CANCELLED",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFFC62828),
-                                modifier = Modifier.padding(top = 2.dp)
-                            )
-                        } else if (statusLower == "kot") {
-                            Text(
-                                text = "KOT Sent",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFE65100),
-                                modifier = Modifier.padding(top = 2.dp)
-                            )
-                        }
                     }
                 }
 
