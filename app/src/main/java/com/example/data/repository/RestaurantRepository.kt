@@ -241,7 +241,8 @@ class RestaurantRepository private constructor() {
                     cache?.upsertTables(data)
                     _tables.value = data
                     data.forEach { tbl ->
-                        if (tbl.status.equals("available", ignoreCase = true) || tbl.statusId == 1) {
+                        if (tbl.status.equals("available", ignoreCase = true) || 
+                            tbl.statusLabel.equals("available", ignoreCase = true)) {
                             orderCache?.deleteOrdersForTable(tbl.id)
                             _orders.value = _orders.value.filterNot { it.tableId == tbl.id }
                         }
@@ -370,7 +371,7 @@ class RestaurantRepository private constructor() {
             val response = api.getOrderBootstrap(tableId = tableId, orderId = orderId)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
                 response.body()?.data?.let { serverOrder ->
-                    if (serverOrder.orderId.isBlank() || serverOrder.status.equals("available", ignoreCase = true) || serverOrder.totalItems == 0) {
+                    if (serverOrder.orderId.isNullOrBlank() || serverOrder.status.equals("available", ignoreCase = true) || serverOrder.totalItems == 0) {
                         if (!tableId.isNullOrBlank()) {
                             orderCache?.deleteOrdersForTable(tableId)
                             _orders.value = _orders.value.filterNot { it.tableId == tableId }
@@ -1299,7 +1300,7 @@ class RestaurantRepository private constructor() {
                 "served", "food_served" -> "served"
                 "billed", "bill printed", "bill_printed" -> "billed"
                 "finalized", "completed", "available", "free" -> "available"
-                else -> if (normalizedOrder.totalItems == 0 || normalizedOrder.orderId.isBlank()) "available" else "occupied"
+                else -> if (normalizedOrder.totalItems == 0 || normalizedOrder.orderId.isNullOrBlank()) "available" else "occupied"
             }
             updateTableStatus(normalizedOrder.tableId, statusToSet, normalizedOrder.guestCount, normalizedOrder.orderId)
         }
