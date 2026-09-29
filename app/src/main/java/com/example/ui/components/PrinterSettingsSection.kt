@@ -179,6 +179,11 @@ fun DivisionPrinterCard(
     onTestPrint: (DivisionPrinterConfig) -> Unit
 ) {
     var expandedUsbMenu by remember { mutableStateOf(false) }
+    var isScanning by remember { mutableStateOf(false) }
+    var discoveredIps by remember { mutableStateOf<List<String>>(emptyList()) }
+    var expandedIpMenu by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -256,42 +261,116 @@ fun DivisionPrinterCard(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Network IP & Port Fields
+                // Network IP & Port Fields with Auto-Scan
                 if (config.connectionType == PrinterConnectionType.NETWORK) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = config.ipAddress,
-                            onValueChange = { onConfigChanged(config.copy(ipAddress = it.trim())) },
-                            label = { Text("Printer IP Address", fontSize = 11.sp) },
-                            placeholder = { Text("192.168.1.200") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(2.2f),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = PinkPrimary,
-                                focusedLabelColor = PinkPrimary
-                            )
-                        )
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(modifier = Modifier.weight(2f)) {
+                                OutlinedTextField(
+                                    value = config.ipAddress,
+                                    onValueChange = { onConfigChanged(config.copy(ipAddress = it.trim())) },
+                                    label = { Text("Printer IP Address", fontSize = 11.sp) },
+                                    placeholder = { Text("192.168.0.31") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = PinkPrimary,
+                                        focusedLabelColor = PinkPrimary
+                                    )
+                                )
 
-                        OutlinedTextField(
-                            value = config.port.toString(),
-                            onValueChange = {
-                                val p = it.filter { ch -> ch.isDigit() }.toIntOrNull() ?: 9100
-                                onConfigChanged(config.copy(port = p))
-                            },
-                            label = { Text("Port", fontSize = 11.sp) },
-                            placeholder = { Text("9100") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = PinkPrimary,
-                                focusedLabelColor = PinkPrimary
+                                DropdownMenu(
+                                    expanded = expandedIpMenu,
+                                    onDismissRequest = { expandedIpMenu = false }
+                                ) {
+                                    discoveredIps.forEach { ip ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(Icons.Default.Print, contentDescription = null, tint = PinkPrimary, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Text(ip, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                            },
+                                            onClick = {
+                                                onConfigChanged(config.copy(ipAddress = ip))
+                                                expandedIpMenu = false
+                                                Toast.makeText(context, "Selected IP: $ip", Toast.LENGTH_SHORT).show()
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            OutlinedTextField(
+                                value = config.port.toString(),
+                                onValueChange = {
+                                    val p = it.filter { ch -> ch.isDigit() }.toIntOrNull() ?: 9100
+                                    onConfigChanged(config.copy(port = p))
+                                },
+                                label = { Text("Port", fontSize = 11.sp) },
+                                placeholder = { Text("9100") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(0.9f),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = PinkPrimary,
+                                    focusedLabelColor = PinkPrimary
+                                )
                             )
-                        )
+
+                            // Auto-Scan Button
+                            FilledTonalButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        isScanning = true
+                                        val myIp = ThermalPrinterManager.getLocalDeviceIp()
+                                        if (myIp == null) {
+                                            Toast.makeText(context, "WiFi not connected or no local IP found", Toast.LENGTH_SHORT).show()
+                                            isScanning = false
+                                            return@launch
+                                        }
+                                        Toast.makeText(context, "Scanning WiFi subnet (${myIp.substringBeforeLast(".")}.x)...", Toast.LENGTH_SHORT).show()
+                                        val found = ThermalPrinterManager.scanNetworkPrinters(config.port)
+                                        isScanning = false
+                                        discoveredIps = found
+
+                                        if (found.isEmpty()) {
+                                            Toast.makeText(context, "No printer found on port ${config.port}. Check if printer is ON.", Toast.LENGTH_LONG).show()
+                                        } else if (found.size == 1) {
+                                            onConfigChanged(config.copy(ipAddress = found.first()))
+                                            Toast.makeText(context, "Found Printer! IP set to ${found.first()}", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            expandedIpMenu = true
+                                            Toast.makeText(context, "Found ${found.size} printers. Please select one.", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                enabled = !isScanning,
+                                modifier = Modifier
+                                    .padding(top = 6.dp)
+                                    .height(50.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = PinkLightBg,
+                                    contentColor = PinkPrimary
+                                )
+                            ) {
+                                if (isScanning) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = PinkPrimary)
+                                } else {
+                                    Icon(Icons.Default.Search, contentDescription = "Scan", modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Scan", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
                     }
                 } else {
                     // USB Device Selection

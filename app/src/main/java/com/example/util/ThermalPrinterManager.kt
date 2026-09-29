@@ -11,17 +11,76 @@ import com.example.data.model.DivisionPrinterConfig
 import com.example.data.model.OrderItem
 import com.example.data.model.PrinterConnectionType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.net.Inet4Address
 import java.net.InetSocketAddress
+import java.net.NetworkInterface
 import java.net.Socket
 import java.text.SimpleDateFormat
+import java.util.Collections
 import java.util.Date
 import java.util.Locale
 
 object ThermalPrinterManager {
 
     private const val ACTION_USB_PERMISSION = "com.example.USB_PERMISSION"
+
+    /**
+     * Get the active IPv4 address of this Android device on local WiFi/LAN.
+     */
+    fun getLocalDeviceIp(): String? {
+        try {
+            val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
+            for (intf in interfaces) {
+                if (intf.isLoopback || !intf.isUp) continue
+                val addrs = Collections.list(intf.inetAddresses)
+                for (addr in addrs) {
+                    if (!addr.isLoopbackAddress && addr is Inet4Address) {
+                        val host = addr.hostAddress ?: continue
+                        if (host.startsWith("192.168.") || host.startsWith("10.") || host.startsWith("172.")) {
+                            return host
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return null
+    }
+
+    /**
+     * Fast Parallel Subnet Scanner:
+     * Scans all 254 IP addresses on the local subnet for open RAW printer port (default 9100).
+     * Finishes in ~1.5 - 2 seconds using concurrent Kotlin coroutines.
+     */
+    suspend fun scanNetworkPrinters(port: Int = 9100): List<String> = withContext(Dispatchers.IO) {
+        val myIp = getLocalDeviceIp() ?: return@withContext emptyList()
+        val subnet = myIp.substringBeforeLast(".") // e.g. "192.168.0"
+        val foundList = Collections.synchronizedList(mutableListOf<String>())
+
+        coroutineScope {
+            (1..254).map { i ->
+                async(Dispatchers.IO) {
+                    val testIp = "$subnet.$i"
+                    try {
+                        Socket().use { socket ->
+                            socket.connect(InetSocketAddress(testIp, port), 450) // 450ms timeout
+                            foundList.add(testIp)
+                        }
+                    } catch (_: Exception) {}
+                }
+            }.awaitAll()
+        }
+
+        foundList.sortedBy { ip ->
+            ip.substringAfterLast(".").toIntOrNull() ?: 0
+        }
+    }
 
     // ESC/POS Commands
     private val ESC_INIT = byteArrayOf(0x1B, 0x40)
