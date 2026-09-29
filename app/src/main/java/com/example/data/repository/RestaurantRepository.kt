@@ -240,6 +240,12 @@ class RestaurantRepository private constructor() {
                 if (data.isNotEmpty()) {
                     cache?.upsertTables(data)
                     _tables.value = data
+                    data.forEach { tbl ->
+                        if (tbl.status.equals("available", ignoreCase = true) || tbl.statusId == 1) {
+                            orderCache?.deleteOrdersForTable(tbl.id)
+                            _orders.value = _orders.value.filterNot { it.tableId == tbl.id }
+                        }
+                    }
                     return@withContext Result.success(data)
                 }
             }
@@ -364,6 +370,14 @@ class RestaurantRepository private constructor() {
             val response = api.getOrderBootstrap(tableId = tableId, orderId = orderId)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
                 response.body()?.data?.let { serverOrder ->
+                    if (serverOrder.orderId.isBlank() || serverOrder.status.equals("available", ignoreCase = true) || serverOrder.totalItems == 0) {
+                        if (!tableId.isNullOrBlank()) {
+                            orderCache?.deleteOrdersForTable(tableId)
+                            _orders.value = _orders.value.filterNot { it.tableId == tableId }
+                            updateTableStatus(tableId, "available", 0, null)
+                        }
+                        return@withContext Result.success(serverOrder)
+                    }
                     val localItemCount = existingOrder?.guests?.flatMap { it.items }?.sumOf { it.quantity } ?: 0
                     val serverItemCount = serverOrder.guests.flatMap { it.items }.sumOf { it.quantity }
                     // Server still empty/stale while offline queue is draining — keep local cart
@@ -1284,8 +1298,8 @@ class RestaurantRepository private constructor() {
                 "ready", "prepared", "kitchen_ready" -> "ready"
                 "served", "food_served" -> "served"
                 "billed", "bill printed", "bill_printed" -> "billed"
-                "finalized", "completed" -> "available"
-                else -> "occupied"
+                "finalized", "completed", "available", "free" -> "available"
+                else -> if (normalizedOrder.totalItems == 0 || normalizedOrder.orderId.isBlank()) "available" else "occupied"
             }
             updateTableStatus(normalizedOrder.tableId, statusToSet, normalizedOrder.guestCount, normalizedOrder.orderId)
         }
