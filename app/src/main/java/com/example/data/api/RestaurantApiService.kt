@@ -60,6 +60,9 @@ interface RestaurantApiService {
         @Field("table_id") tableId: String? = null
     ): Response<ApiResponse<OrderBootstrap>>
 
+    @GET("divisions")
+    suspend fun getDivisions(): Response<ApiResponse<List<Division>>>
+
     @GET("menu_categories")
     suspend fun getMenuCategories(): Response<ApiResponse<List<MenuCategory>>>
 

@@ -1,7 +1,10 @@
 package com.example.ui.screens.orders
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.api.PrinterSettingsManager
+import com.example.util.ThermalPrinterManager
 import com.example.data.model.CustomizationOption
 import com.example.data.model.MenuItem
 import com.example.data.model.OrderBootstrap
@@ -251,7 +254,7 @@ class OrdersViewModel(
         }
     }
 
-    fun sendKot() {
+    fun sendKot(context: Context? = null) {
         val currentOrder = _uiState.value.order ?: return
         val orderId = currentOrder.orderId ?: return
         if (_uiState.value.isSendingKot) {
@@ -259,6 +262,9 @@ class OrdersViewModel(
         }
         val items = currentOrder.guests.flatMap { it.items }
         val hasPending = items.any { it.status.equals("pending", ignoreCase = true) }
+        val pendingItems = items.filter { it.status.equals("pending", ignoreCase = true) }
+        val tableName = currentOrder.tableNumber ?: "Table ${currentOrder.tableId ?: ""}"
+
         if (currentOrder.totalItems == 0) {
             _uiState.value = _uiState.value.copy(snackbarMessage = "Cannot send KOT: Order is empty")
             return
@@ -276,6 +282,29 @@ class OrdersViewModel(
                     isSendingKot = false,
                     snackbarMessage = "KOT Sent to Kitchen!"
                 )
+                // Multi-station Division Thermal Printing
+                if (context != null && pendingItems.isNotEmpty()) {
+                    launch {
+                        try {
+                            val configs = PrinterSettingsManager.getPrinterConfigs(context)
+                            val grouped = pendingItems.groupBy { it.divisionId ?: "1" }
+                            for ((divId, divItems) in grouped) {
+                                val cfg = configs.find { it.divisionId == divId }
+                                if (cfg != null && cfg.isEnabled) {
+                                    ThermalPrinterManager.printKotSlip(
+                                        context = context,
+                                        config = cfg,
+                                        orderId = orderId,
+                                        tableName = tableName,
+                                        items = divItems
+                                    )
+                                }
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                }
             }.onFailure {
                 _uiState.value = _uiState.value.copy(
                     isSendingKot = false,
@@ -306,9 +335,23 @@ class OrdersViewModel(
             return
         }
         val items = order.guests.flatMap { it.items }
-        val hasPending = items.any { it.status.equals("pending", ignoreCase = true) }
+        val activeItems = items.filterNot { 
+            it.status.equals("cancelled", ignoreCase = true) || it.status.equals("canceled", ignoreCase = true) 
+        }
+        if (activeItems.isEmpty()) {
+            _uiState.value = _uiState.value.copy(snackbarMessage = "No active items in order to finalize")
+            return
+        }
+        val hasPending = activeItems.any { it.status.equals("pending", ignoreCase = true) }
         if (hasPending || order.status.equals("active", ignoreCase = true)) {
             _uiState.value = _uiState.value.copy(snackbarMessage = "Send KOT first before finalizing order")
+            return
+        }
+        val notServed = activeItems.count { !it.status.equals("served", ignoreCase = true) }
+        if (notServed > 0) {
+            _uiState.value = _uiState.value.copy(
+                snackbarMessage = "All items must be Served before finalizing order ($notServed item(s) pending in kitchen)"
+            )
             return
         }
         onSuccess(order.orderId ?: "")

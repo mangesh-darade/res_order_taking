@@ -567,6 +567,28 @@ class RestaurantRepository private constructor() {
         Result.success(_categories.value)
     }
 
+    suspend fun fetchDivisions(): Result<List<Division>> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.getDivisions()
+            if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
+                val data = response.body()?.data ?: emptyList()
+                if (data.isNotEmpty()) {
+                    return@withContext Result.success(data)
+                }
+            }
+        } catch (_: Exception) {
+        }
+        Result.success(
+            listOf(
+                Division("1", "Kitchen Printer", "171001"),
+                Division("2", "Bar Printer", "171002"),
+                Division("3", "Lounge Printer", "171003"),
+                Division("4", "Terrace Printer", "171004"),
+                Division("5", "No Print", "171005")
+            )
+        )
+    }
+
     suspend fun fetchMenuItems(categoryId: String? = null, mealType: String? = null, search: String? = null): Result<List<MenuItem>> = withContext(Dispatchers.IO) {
         val cache = menuCache
         val local = cache?.getItems(categoryId, mealType, search).orEmpty()
@@ -1035,13 +1057,12 @@ class RestaurantRepository private constructor() {
             val response = api.finalizeOrder(orderId)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
                 response.body()?.data?.let { data ->
-                    orderCache?.deleteOrder(orderId)
                     val order = _orders.value.find { it.orderId == orderId }
                     if (order?.tableId != null) {
-                        updateTableStatus(order.tableId, "available", 0, null)
-                        _orders.value = _orders.value.filterNot { it.tableId == order.tableId || it.orderId == orderId }
-                    } else {
-                        _orders.value = _orders.value.filterNot { it.orderId == orderId }
+                        updateTableStatus(order.tableId, "billed", order.guestCount, orderId)
+                    }
+                    if (order != null) {
+                        updateLocalOrder(order.copy(status = "billed"))
                     }
                     return@withContext Result.success(data)
                 }
@@ -1051,22 +1072,18 @@ class RestaurantRepository private constructor() {
         }
         val order = _orders.value.find { it.orderId == orderId }
         val grandTotal = order?.grandTotal ?: 0.0
-        val saleId = "SALE-${System.currentTimeMillis() % 100000}"
         if (order != null) {
-            updateLocalOrder(order.copy(status = "finalized"))
+            updateLocalOrder(order.copy(status = "billed"))
         }
         if (order?.tableId != null) {
-            updateTableStatus(order.tableId, "available", 0, null)
-            _orders.value = _orders.value.filterNot { it.tableId == order.tableId || it.orderId == orderId }
-        } else {
-            _orders.value = _orders.value.filterNot { it.orderId == orderId }
+            updateTableStatus(order.tableId, "billed", order.guestCount, orderId)
         }
 
         syncManager?.enqueueAction(orderId, "FINALIZE_ORDER", mapOf("orderId" to orderId))
 
         Result.success(FinalizeOrderResponse(
-            saleId = saleId,
-            invoiceUrl = "http://localhost/invoice/$saleId.pdf",
+            saleId = null,
+            invoiceUrl = null,
             grandTotal = grandTotal
         ))
     }
@@ -1266,6 +1283,7 @@ class RestaurantRepository private constructor() {
                 "kot_sent", "kot sent", "order-placed", "order placed" -> "order-placed"
                 "ready", "prepared", "kitchen_ready" -> "ready"
                 "served", "food_served" -> "served"
+                "billed", "bill printed", "bill_printed" -> "billed"
                 "finalized", "completed" -> "available"
                 else -> "occupied"
             }

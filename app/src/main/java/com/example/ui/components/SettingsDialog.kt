@@ -7,7 +7,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -64,6 +66,7 @@ fun SettingsDialog(
     var passwordVisible by remember { mutableStateOf(false) }
 
     // Settings Form State
+    var selectedTab by remember { mutableStateOf(0) }
     var baseUrlInput by remember { mutableStateOf(ApiSettingsManager.baseUrl) }
     var apiKeyInput by remember { mutableStateOf(ApiSettingsManager.apiKey) }
     var isTestingConnection by remember { mutableStateOf(false) }
@@ -136,7 +139,8 @@ fun SettingsDialog(
             Column(
                 modifier = Modifier
                     .padding(20.dp)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Header Row
@@ -329,7 +333,32 @@ fun SettingsDialog(
                         }
                     }
 
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Tab selector between API and Printers
+                    TabRow(
+                        selectedTabIndex = selectedTab,
+                        containerColor = Color(0xFFF5F5F5),
+                        contentColor = PinkPrimary,
+                        modifier = Modifier.fillMaxWidth().height(42.dp)
+                    ) {
+                        Tab(
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            text = { Text("Server & API", fontSize = 12.sp, fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal) }
+                        )
+                        Tab(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            text = { Text("Thermal Printers", fontSize = 12.sp, fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal) }
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
+
+                    if (selectedTab == 1) {
+                        PrinterSettingsSection()
+                    } else {
 
                     OutlinedTextField(
                         value = baseUrlInput,
@@ -547,6 +576,7 @@ fun SettingsDialog(
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("SAVE", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
+                    }
                     }
                 }
             }

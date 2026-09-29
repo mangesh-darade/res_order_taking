@@ -72,7 +72,9 @@ data class OrderItem(
     @Json(name = "onion_flag") val onionFlag: Boolean? = false, // true = No Onion
     @Json(name = "garlic_flag") val garlicFlag: Boolean? = false, // true = No Garlic
     @Json(name = "special_instructions") val specialInstructions: String? = null,
-    @Json(name = "status") val status: String? = "pending" // "pending", "kot", "ready", "served"
+    @Json(name = "status") val status: String? = "pending", // "pending", "kot", "ready", "served"
+    @Json(name = "division_id") val divisionId: String? = null,
+    @Json(name = "division_name") val divisionName: String? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -115,7 +117,9 @@ data class MenuItem(
     @Json(name = "stock_qty") val stockQty: Double? = null,
     @Json(name = "in_stock") val inStock: Boolean? = true,
     @Json(name = "stock_warning") val stockWarning: Boolean? = false,
-    @Json(name = "station") val station: String? = null
+    @Json(name = "station") val station: String? = null,
+    @Json(name = "division_id") val divisionId: String? = null,
+    @Json(name = "division_name") val divisionName: String? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -203,5 +207,29 @@ data class TableMoveResponse(
     @Json(name = "from_table_id") val fromTableId: String? = null,
     @Json(name = "to_table_id") val toTableId: String? = null,
     @Json(name = "order") val order: OrderBootstrap? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class Division(
+    @Json(name = "id") val id: String = "1",
+    @Json(name = "name") val name: String = "Kitchen Printer",
+    @Json(name = "code") val code: String? = null
+)
+
+enum class PrinterConnectionType {
+    NETWORK, // LAN / IP (Port 9100)
+    USB      // OTG / Direct USB
+}
+
+@JsonClass(generateAdapter = true)
+data class DivisionPrinterConfig(
+    @Json(name = "division_id") val divisionId: String,
+    @Json(name = "division_name") val divisionName: String,
+    @Json(name = "is_enabled") val isEnabled: Boolean = true,
+    @Json(name = "connection_type") val connectionType: PrinterConnectionType = PrinterConnectionType.NETWORK,
+    @Json(name = "ip_address") val ipAddress: String = "192.168.1.200",
+    @Json(name = "port") val port: Int = 9100,
+    @Json(name = "usb_device_name") val usbDeviceName: String = "",
+    @Json(name = "paper_size") val paperSize: String = "80mm" // "58mm" or "80mm"
 )
 

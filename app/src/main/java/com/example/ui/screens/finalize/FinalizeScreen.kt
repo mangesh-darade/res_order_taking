@@ -131,7 +131,7 @@ fun FinalizeScreen(
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "✓ Order Confirmed",
+                                text = "✓ Bill Printed (Ready for Settlement)",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White

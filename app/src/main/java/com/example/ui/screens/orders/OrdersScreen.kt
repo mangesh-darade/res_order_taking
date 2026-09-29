@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -50,6 +51,7 @@ fun OrdersScreen(
     onLogoutClick: (() -> Unit)? = null,
     viewModel: OrdersViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var tableDropdownExpanded by remember { mutableStateOf(false) }
@@ -105,7 +107,7 @@ fun OrdersScreen(
                     // Left Button: KOT (pending) or Served (when ready items waiting)
                     Button(
                         onClick = {
-                            if (showServed) viewModel.markServed() else viewModel.sendKot()
+                            if (showServed) viewModel.markServed() else viewModel.sendKot(context)
                         },
                         enabled = if (showServed) hasReady else kotEnabled,
                         colors = ButtonDefaults.buttonColors(
@@ -375,7 +377,7 @@ fun OrdersScreen(
                                 viewModel.updateItemQty(itemId, newQty)
                             },
                             onKotClick = {
-                                viewModel.sendKot()
+                                viewModel.sendKot(context)
                             },
                             onDismissRequest = { showGridPopup = false }
                         )
