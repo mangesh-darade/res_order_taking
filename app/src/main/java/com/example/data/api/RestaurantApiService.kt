@@ -140,13 +140,13 @@ interface RestaurantApiService {
         @Field("reserved_until") reservedUntil: String? = null,
         @Field("reserved_note") reservedNote: String? = null,
         @Field("update_existing") updateExisting: Int = 0
-    ): Response<ApiResponse<Map<String, String>>>
+    ): Response<ApiResponse<Map<String, Any?>>>
 
     @FormUrlEncoded
     @POST("unreserve_table")
     suspend fun unreserveTable(
         @Field("table_id") tableId: String
-    ): Response<ApiResponse<Map<String, String>>>
+    ): Response<ApiResponse<Map<String, Any?>>>
 
     @FormUrlEncoded
     @POST("transfer_table")
