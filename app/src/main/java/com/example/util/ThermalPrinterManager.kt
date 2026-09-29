@@ -331,13 +331,13 @@ object ThermalPrinterManager {
 
             out.write("$line\n".toByteArray(Charsets.US_ASCII))
 
-            // Items Header
+            // Items Header (QTY and ITEM DESCRIPTION only)
             out.write(ESC_ALIGN_LEFT)
             out.write(ESC_BOLD_ON)
             if (width == 32) {
-                out.write(String.format(Locale.US, "%-4s %-20s %5s\n", "QTY", "ITEM", "STAT").toByteArray(Charsets.US_ASCII))
+                out.write(String.format(Locale.US, "%-4s %-27s\n", "QTY", "ITEM DESCRIPTION").toByteArray(Charsets.US_ASCII))
             } else {
-                out.write(String.format(Locale.US, "%-5s %-32s %8s\n", "QTY", "ITEM DESCRIPTION", "STATUS").toByteArray(Charsets.US_ASCII))
+                out.write(String.format(Locale.US, "%-5s %-42s\n", "QTY", "ITEM DESCRIPTION").toByteArray(Charsets.US_ASCII))
             }
             out.write(ESC_BOLD_OFF)
             out.write("$line\n".toByteArray(Charsets.US_ASCII))
@@ -345,12 +345,13 @@ object ThermalPrinterManager {
             // Print each item for this station
             for (item in items) {
                 val qtyStr = "${item.quantity}x"
-                val name = if (item.productName.length > (width - 12)) item.productName.take(width - 12) else item.productName
+                val maxLen = if (width == 32) 27 else 42
+                val name = if (item.productName.length > maxLen) item.productName.take(maxLen) else item.productName
                 out.write(ESC_BOLD_ON)
                 if (width == 32) {
-                    out.write(String.format(Locale.US, "%-4s %-26s\n", qtyStr, name).toByteArray(Charsets.US_ASCII))
+                    out.write(String.format(Locale.US, "%-4s %-27s\n", qtyStr, name).toByteArray(Charsets.US_ASCII))
                 } else {
-                    out.write(String.format(Locale.US, "%-5s %-41s\n", qtyStr, name).toByteArray(Charsets.US_ASCII))
+                    out.write(String.format(Locale.US, "%-5s %-42s\n", qtyStr, name).toByteArray(Charsets.US_ASCII))
                 }
                 out.write(ESC_BOLD_OFF)
 
