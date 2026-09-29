@@ -385,6 +385,239 @@ fun DivisionPrinterCard(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Toggle for Advanced Thermal Settings (Line spacing, Auto-cut, Buzzer, Parcel)
+                var showAdvanced by remember { mutableStateOf(false) }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFF1F5F9),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showAdvanced = !showAdvanced }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(14.dp), tint = PinkPrimary)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Advanced Settings (Cut, Spacing, Buzzer, Parcel)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextDark
+                            )
+                        }
+                        Icon(
+                            imageVector = if (showAdvanced) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = TextMuted,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                if (showAdvanced) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.White, RoundedCornerShape(8.dp))
+                            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // 1. Auto-Cut & Feed Lines
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Auto-Cut Paper", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = TextDark)
+                                Text("Automatically cuts receipt after printing", fontSize = 10.sp, color = TextMuted)
+                            }
+                            Switch(
+                                checked = config.autoCut,
+                                onCheckedChange = { onConfigChanged(config.copy(autoCut = it)) },
+                                modifier = Modifier.height(24.dp),
+                                colors = SwitchDefaults.colors(checkedTrackColor = PinkPrimary)
+                            )
+                        }
+
+                        if (config.autoCut) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Feed lines before cut:", fontSize = 11.sp, color = TextMuted)
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    listOf(2, 3, 4).forEach { lines ->
+                                        val sel = config.feedLinesBeforeCut == lines
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = if (sel) PinkLightBg else Color(0xFFF8FAFC),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, if (sel) PinkPrimary else Color(0xFFCBD5E1)),
+                                            modifier = Modifier
+                                                .clickable { onConfigChanged(config.copy(feedLinesBeforeCut = lines)) }
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "${lines} lines",
+                                                fontSize = 10.sp,
+                                                fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (sel) PinkPrimary else TextDark
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(color = Color(0xFFF1F5F9))
+
+                        // 2. Line Spacing (Compact vs Normal vs Wide)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Line Spacing (अंतर)", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = TextDark)
+                                Text("Compact saves paper, Wide improves readability", fontSize = 10.sp, color = TextMuted)
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            val spacingOptions = listOf(
+                                Triple(24, "Compact", "Save Paper"),
+                                Triple(32, "Normal", "Standard"),
+                                Triple(40, "Wide", "Spacious")
+                            )
+                            spacingOptions.forEach { (dots, label, desc) ->
+                                val sel = config.lineSpacing == dots
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (sel) PinkLightBg else Color(0xFFF8FAFC),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, if (sel) PinkPrimary else Color(0xFFCBD5E1)),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { onConfigChanged(config.copy(lineSpacing = dots)) }
+                                        .padding(vertical = 4.dp),
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(text = label, fontSize = 11.sp, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal, color = if (sel) PinkPrimary else TextDark)
+                                        Text(text = desc, fontSize = 9.sp, color = TextMuted)
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(color = Color(0xFFF1F5F9))
+
+                        // 3. Kitchen Buzzer / Beep Alarm
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Kitchen Sound Buzzer / Beep", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = TextDark)
+                                Text("Audible alarm on printer when new KOT arrives", fontSize = 10.sp, color = TextMuted)
+                            }
+                            Switch(
+                                checked = config.soundBuzzer,
+                                onCheckedChange = { onConfigChanged(config.copy(soundBuzzer = it)) },
+                                modifier = Modifier.height(24.dp),
+                                colors = SwitchDefaults.colors(checkedTrackColor = PinkPrimary)
+                            )
+                        }
+
+                        HorizontalDivider(color = Color(0xFFF1F5F9))
+
+                        // 4. Print Copies (1 Copy vs 2 Copies)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Print Copies (प्रती)", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = TextDark)
+                                Text("Number of duplicate KOT slips to print", fontSize = 10.sp, color = TextMuted)
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf(1 to "1 Copy", 2 to "2 Copies").forEach { (num, lbl) ->
+                                    val sel = config.printCopies == num
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = if (sel) PinkLightBg else Color(0xFFF8FAFC),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, if (sel) PinkPrimary else Color(0xFFCBD5E1)),
+                                        modifier = Modifier
+                                            .clickable { onConfigChanged(config.copy(printCopies = num)) }
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = lbl,
+                                            fontSize = 11.sp,
+                                            fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (sel) PinkPrimary else TextDark
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(color = Color(0xFFF1F5F9))
+
+                        // 5. Highlight Parcel / Order Type Header
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Highlight Parcel / Takeaway Badge", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = TextDark)
+                                Text("Prints prominent [PARCEL] banner for packing", fontSize = 10.sp, color = TextMuted)
+                            }
+                            Switch(
+                                checked = config.showOrderType,
+                                onCheckedChange = { onConfigChanged(config.copy(showOrderType = it)) },
+                                modifier = Modifier.height(24.dp),
+                                colors = SwitchDefaults.colors(checkedTrackColor = PinkPrimary)
+                            )
+                        }
+
+                        HorizontalDivider(color = Color(0xFFF1F5F9))
+
+                        // 6. Waiter / Captain Name
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Print Waiter / Captain Name", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = TextDark)
+                                Text("Shows captain name on the KOT slip", fontSize = 10.sp, color = TextMuted)
+                            }
+                            Switch(
+                                checked = config.showWaiterName,
+                                onCheckedChange = { onConfigChanged(config.copy(showWaiterName = it)) },
+                                modifier = Modifier.height(24.dp),
+                                colors = SwitchDefaults.colors(checkedTrackColor = PinkPrimary)
+                            )
+                        }
+                    }
+                }
+
                 // Test result feedback
                 testResult?.let { (success, msg) ->
                     Spacer(modifier = Modifier.height(6.dp))

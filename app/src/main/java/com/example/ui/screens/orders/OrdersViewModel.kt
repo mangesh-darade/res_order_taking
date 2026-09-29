@@ -296,7 +296,8 @@ class OrdersViewModel(
                                         config = cfg,
                                         orderId = orderId,
                                         tableName = tableName,
-                                        items = divItems
+                                        items = divItems,
+                                        orderType = "Dine in"
                                     )
                                 }
                             }

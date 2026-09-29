@@ -230,6 +230,13 @@ data class DivisionPrinterConfig(
     @Json(name = "ip_address") val ipAddress: String = "192.168.1.200",
     @Json(name = "port") val port: Int = 9100,
     @Json(name = "usb_device_name") val usbDeviceName: String = "",
-    @Json(name = "paper_size") val paperSize: String = "80mm" // "58mm" or "80mm"
+    @Json(name = "paper_size") val paperSize: String = "80mm", // "58mm" or "80mm"
+    @Json(name = "auto_cut") val autoCut: Boolean = true,
+    @Json(name = "feed_lines_before_cut") val feedLinesBeforeCut: Int = 3,
+    @Json(name = "line_spacing") val lineSpacing: Int = 32, // 24 = compact, 32 = normal, 40 = wide
+    @Json(name = "print_copies") val printCopies: Int = 1, // 1 or 2 copies
+    @Json(name = "sound_buzzer") val soundBuzzer: Boolean = true, // Kitchen buzzer / alarm
+    @Json(name = "show_order_type") val showOrderType: Boolean = true, // Highlight PARCEL vs DINE IN
+    @Json(name = "show_waiter_name") val showWaiterName: Boolean = true
 )
 

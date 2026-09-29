@@ -41,7 +41,14 @@ object PrinterSettingsManager {
                         ipAddress = obj.optString("ip_address", "192.168.1.200"),
                         port = obj.optInt("port", 9100),
                         usbDeviceName = obj.optString("usb_device_name", ""),
-                        paperSize = obj.optString("paper_size", "80mm")
+                        paperSize = obj.optString("paper_size", "80mm"),
+                        autoCut = obj.optBoolean("auto_cut", true),
+                        feedLinesBeforeCut = obj.optInt("feed_lines_before_cut", 3),
+                        lineSpacing = obj.optInt("line_spacing", 32),
+                        printCopies = obj.optInt("print_copies", 1),
+                        soundBuzzer = obj.optBoolean("sound_buzzer", true),
+                        showOrderType = obj.optBoolean("show_order_type", true),
+                        showWaiterName = obj.optBoolean("show_waiter_name", true)
                     )
                 )
             }
@@ -115,6 +122,13 @@ object PrinterSettingsManager {
                 put("port", cfg.port)
                 put("usb_device_name", cfg.usbDeviceName)
                 put("paper_size", cfg.paperSize)
+                put("auto_cut", cfg.autoCut)
+                put("feed_lines_before_cut", cfg.feedLinesBeforeCut)
+                put("line_spacing", cfg.lineSpacing)
+                put("print_copies", cfg.printCopies)
+                put("sound_buzzer", cfg.soundBuzzer)
+                put("show_order_type", cfg.showOrderType)
+                put("show_waiter_name", cfg.showWaiterName)
             }
             jsonArr.put(obj)
         }
