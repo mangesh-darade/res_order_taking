@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -122,6 +123,54 @@ fun TablesScreen(
                 }
             }
 
+            if (uiState.hasAssignedTables) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color(0xFFFFF7ED),
+                    shadowElevation = 1.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.FilterList,
+                                contentDescription = null,
+                                tint = Color(0xFFC2410C),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = if (uiState.isFilterByAssigned) "Assigned Tables (${uiState.assignedCount})" else "All Tables (${uiState.allTables.size})",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFC2410C)
+                            )
+                        }
+
+                        AssistChip(
+                            onClick = { viewModel.toggleAssignedFilter() },
+                            label = {
+                                Text(
+                                    text = if (uiState.isFilterByAssigned) "SHOW ALL" else "MY TABLES",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = if (uiState.isFilterByAssigned) Color.White else Color(0xFFEA580C),
+                                labelColor = if (uiState.isFilterByAssigned) Color(0xFFEA580C) else Color.White
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEA580C)),
+                            modifier = Modifier.height(28.dp)
+                        )
+                    }
+                }
+            }
+
             // Non-blocking pick banner — tables stay tappable (do NOT use AlertDialog here)
             if (uiState.pickTargetMode != null) {
                 Surface(
@@ -195,25 +244,39 @@ fun TablesScreen(
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                text = "No Tables Found",
+                                text = if (uiState.hasAssignedTables && uiState.isFilterByAssigned) "No Assigned Tables Here" else "No Tables Found",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextDark
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "No tables found in this section.\nPlease configure sections and tables in ElintOm POS.",
+                                text = if (uiState.hasAssignedTables && uiState.isFilterByAssigned) {
+                                    "You have no assigned tables in this section.\nTap below to view all tables."
+                                } else {
+                                    "No tables found in this section.\nPlease configure sections and tables in ElintOm POS."
+                                },
                                 fontSize = 13.sp,
                                 color = TextMuted,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            Button(
-                                onClick = { viewModel.loadTables(silent = false) },
-                                colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text("Refresh Tables")
+                            if (uiState.hasAssignedTables && uiState.isFilterByAssigned) {
+                                Button(
+                                    onClick = { viewModel.toggleAssignedFilter() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("SHOW ALL TABLES")
+                                }
+                            } else {
+                                Button(
+                                    onClick = { viewModel.loadTables(silent = false) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("Refresh Tables")
+                                }
                             }
                         }
                     }

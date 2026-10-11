@@ -3,6 +3,7 @@ package com.example.ui.screens.tables
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.model.TableItem
+import com.example.data.repository.AuthRepository
 import com.example.data.repository.RestaurantRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -19,6 +20,10 @@ data class TablesUiState(
     val subsectionId: String? = null,
     val subsectionName: String? = null,
     val tables: List<TableItem> = emptyList(),
+    val allTables: List<TableItem> = emptyList(),
+    val isFilterByAssigned: Boolean = true,
+    val hasAssignedTables: Boolean = false,
+    val assignedCount: Int = 0,
     val confirmDialogTable: TableItem? = null,
     val reserveDialogTable: TableItem? = null,
     val opsDialogTable: TableItem? = null,
@@ -38,6 +43,37 @@ class TablesViewModel(
 
     init {
         startAutoRefresh()
+    }
+
+    private fun getAssignedTableIds(): Set<String> {
+        val user = AuthRepository.getInstance().currentUser.value
+        val assigned = user?.tableAssign
+        if (assigned.isNullOrBlank()) return emptySet()
+        return assigned.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    }
+
+    private fun isTableAssigned(table: TableItem, assignedIds: Set<String>): Boolean {
+        if (assignedIds.isEmpty()) return true
+        return assignedIds.contains(table.id) ||
+               assignedIds.contains(table.tableNumber) ||
+               assignedIds.any { id -> table.tableNumber.equals("T$id", ignoreCase = true) || table.tableNumber.equals(id, ignoreCase = true) }
+    }
+
+    private fun applyFilter(list: List<TableItem>, filterAssigned: Boolean): List<TableItem> {
+        val assignedIds = getAssignedTableIds()
+        if (!filterAssigned || assignedIds.isEmpty()) {
+            return list
+        }
+        return list.filter { isTableAssigned(it, assignedIds) }
+    }
+
+    fun toggleAssignedFilter() {
+        val nextFilter = !_uiState.value.isFilterByAssigned
+        val displayed = applyFilter(_uiState.value.allTables, nextFilter)
+        _uiState.value = _uiState.value.copy(
+            isFilterByAssigned = nextFilter,
+            tables = displayed
+        )
     }
 
     fun startAutoRefresh() {
@@ -85,9 +121,17 @@ class TablesViewModel(
             }
             val result = repository.fetchTables(secId, subId)
             result.onSuccess { list ->
+                val assignedIds = getAssignedTableIds()
+                val hasAssigned = assignedIds.isNotEmpty()
+                val filterActive = _uiState.value.isFilterByAssigned && hasAssigned
+                val displayed = applyFilter(list, filterActive)
+                val countAssigned = list.count { isTableAssigned(it, assignedIds) }
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    tables = list
+                    allTables = list,
+                    tables = displayed,
+                    hasAssignedTables = hasAssigned,
+                    assignedCount = countAssigned
                 )
             }.onFailure {
                 if (!silent) {
