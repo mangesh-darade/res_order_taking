@@ -36,25 +36,33 @@ class FinalizeViewModel(
             val finRes = repository.finalizeOrder(orderId)
             val finData = finRes.getOrNull()
 
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                order = orderData,
-                finalizeResult = finData,
-                showSuccessBanner = true
-            )
+            if (finRes.isSuccess) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    order = orderData,
+                    finalizeResult = finData,
+                    showSuccessBanner = true
+                )
 
-            // Auto-hide green banner after 5s
-            launch {
-                delay(5000)
-                _uiState.value = _uiState.value.copy(showSuccessBanner = false)
-            }
+                // Auto-hide green banner after 5s
+                launch {
+                    delay(5000)
+                    _uiState.value = _uiState.value.copy(showSuccessBanner = false)
+                }
 
-            // Auto navigate back to Tables after 7s countdown
-            for (sec in 7 downTo 1) {
-                _uiState.value = _uiState.value.copy(autoNavigateTimer = sec)
-                delay(1000)
+                // Auto navigate back to Tables after 7s countdown
+                for (sec in 7 downTo 1) {
+                    _uiState.value = _uiState.value.copy(autoNavigateTimer = sec)
+                    delay(1000)
+                }
+                onAutoNavigate()
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    order = orderData,
+                    showSuccessBanner = false
+                )
             }
-            onAutoNavigate()
         }
     }
 }
