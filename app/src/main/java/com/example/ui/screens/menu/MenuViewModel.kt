@@ -144,9 +144,11 @@ class MenuViewModel(
         specialInstructions: String?
     ) {
         viewModelScope.launch {
-            val orderId = _uiState.value.orderId.ifEmpty { "ORD-${_uiState.value.tableId}" }
+            val currentTableId = _uiState.value.tableId
+            val orderId = _uiState.value.orderId.ifEmpty { "ORD-$currentTableId" }
             val result = repository.addItemToOrder(
                 orderId = orderId,
+                tableId = currentTableId,
                 guestId = _uiState.value.guestId,
                 productId = item.id,
                 quantity = qty,
