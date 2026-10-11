@@ -363,18 +363,16 @@ class OrdersViewModel(
         }
         val hasPending = activeItems.any { it.status.equals("pending", ignoreCase = true) }
         if (hasPending || order.status.equals("active", ignoreCase = true)) {
-            _uiState.value = _uiState.value.copy(snackbarMessage = "Send KOT first before finalizing order")
+            _uiState.value = _uiState.value.copy(snackbarMessage = "आधी KOT पाठवून सर्व आयटम्स Served करा, त्यानंतरच बिल जनरेट होईल.")
             return
         }
-        val kdsEnabled = repository.branding.value.kdsEnabled ?: 1
-        if (kdsEnabled == 1) {
-            val unserved = activeItems.filterNot { it.status.equals("served", ignoreCase = true) }
-            if (unserved.isNotEmpty()) {
-                _uiState.value = _uiState.value.copy(
-                    snackbarMessage = "Cannot bill order: ${unserved.size} item(s) not served yet. Tap 'Served' or wait for kitchen."
-                )
-                return
-            }
+        // Strict: Every item must be SERVED before bill generation
+        val unserved = activeItems.filterNot { it.status.equals("served", ignoreCase = true) }
+        if (unserved.isNotEmpty()) {
+            _uiState.value = _uiState.value.copy(
+                snackbarMessage = "जोपर्यंत सर्व आयटम्स Served होत नाहीत, तोपर्यंत बिल जनरेट होणार नाही (${unserved.size} आयटम अजून सर्व्ह झालेले नाहीत)."
+            )
+            return
         }
         onSuccess(order.orderId ?: "")
     }

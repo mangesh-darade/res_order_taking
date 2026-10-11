@@ -1116,6 +1116,14 @@ class RestaurantRepository private constructor() {
     }
 
     suspend fun finalizeOrder(orderId: String): Result<FinalizeOrderResponse> = withContext(Dispatchers.IO) {
+        val currentOrder = _orders.value.find { it.orderId == orderId }
+        val activeItems = currentOrder?.guests?.flatMap { it.items }?.filterNot { 
+            it.status.equals("cancelled", ignoreCase = true) || it.status.equals("canceled", ignoreCase = true) 
+        }.orEmpty()
+        val unserved = activeItems.filterNot { it.status.equals("served", ignoreCase = true) }
+        if (unserved.isNotEmpty()) {
+            return@withContext Result.failure(Exception("जोपर्यंत सर्व आयटम्स Served होत नाहीत, तोपर्यंत बिल जनरेट होणार नाही."))
+        }
         try {
             val response = api.finalizeOrder(orderId)
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
