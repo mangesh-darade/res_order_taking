@@ -32,11 +32,12 @@ data class OrdersUiState(
     val editItem: OrderItem? = null,
     val editMenuItem: MenuItem? = null,
     val editCustomization: ProductCustomization? = null,
-    val isEditLoading: Boolean = false
+    val isEditLoading: Boolean = false,
+    val kdsEnabled: Boolean = true
 )
 
 class OrdersViewModel(
-    private val repository: RestaurantRepository = RestaurantRepository()
+    private val repository: RestaurantRepository = RestaurantRepository.getInstance()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OrdersUiState())
@@ -47,6 +48,12 @@ class OrdersViewModel(
     init {
         viewModelScope.launch {
             repository.fetchBranding()
+        }
+        viewModelScope.launch {
+            repository.branding.collect { b ->
+                val enabled = (b.kdsEnabled ?: 1) == 1
+                _uiState.value = _uiState.value.copy(kdsEnabled = enabled)
+            }
         }
         loadTablesList()
         startAutoRefresh()
@@ -68,17 +75,28 @@ class OrdersViewModel(
 
     fun loadTablesList() {
         viewModelScope.launch {
+            val cachedTables = repository.getAllCachedTables()
+            if (cachedTables.isNotEmpty()) {
+                _uiState.value = _uiState.value.copy(tablesList = cachedTables)
+            }
             val result = repository.fetchTables("1")
             result.onSuccess { list ->
-                _uiState.value = _uiState.value.copy(tablesList = list)
+                val combined = if (list.isNotEmpty()) list else repository.getAllCachedTables()
+                _uiState.value = _uiState.value.copy(tablesList = combined)
             }
         }
     }
 
     fun setTableId(tableId: String?) {
-        _uiState.value = _uiState.value.copy(tableId = tableId, selectedGuestFilter = -1)
+        val isTableAvailable = _uiState.value.tablesList.find { it.id == tableId }?.status?.equals("available", ignoreCase = true) == true
+        val cached = if (isTableAvailable) null else tableId?.let { repository.getCachedOrderByTableId(it) }
+        _uiState.value = _uiState.value.copy(
+            tableId = tableId,
+            order = cached ?: _uiState.value.order?.takeIf { it.tableId == tableId && !isTableAvailable },
+            selectedGuestFilter = -1
+        )
         if (tableId != null) {
-            loadOrderData(tableId, silent = false)
+            loadOrderData(tableId, silent = cached != null)
         }
     }
 
@@ -275,7 +293,7 @@ class OrdersViewModel(
         }
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSendingKot = true)
-            val result = repository.sendKot(orderId)
+            val result = repository.sendKot(orderId, currentOrder.tableId)
             result.onSuccess { updated ->
                 _uiState.value = _uiState.value.copy(
                     order = updated,
@@ -348,12 +366,15 @@ class OrdersViewModel(
             _uiState.value = _uiState.value.copy(snackbarMessage = "Send KOT first before finalizing order")
             return
         }
-        val notServed = activeItems.count { !it.status.equals("served", ignoreCase = true) }
-        if (notServed > 0) {
-            _uiState.value = _uiState.value.copy(
-                snackbarMessage = "All items must be Served before finalizing order ($notServed item(s) pending in kitchen)"
-            )
-            return
+        val kdsEnabled = repository.branding.value.kdsEnabled ?: 1
+        if (kdsEnabled == 1) {
+            val unserved = activeItems.filterNot { it.status.equals("served", ignoreCase = true) }
+            if (unserved.isNotEmpty()) {
+                _uiState.value = _uiState.value.copy(
+                    snackbarMessage = "Cannot bill order: ${unserved.size} item(s) not served yet. Tap 'Served' or wait for kitchen."
+                )
+                return
+            }
         }
         onSuccess(order.orderId ?: "")
     }

@@ -89,8 +89,32 @@ fun OrdersScreen(
             val allItems = order?.guests?.flatMap { it.items }.orEmpty()
             val hasPending = allItems.any { it.status.equals("pending", ignoreCase = true) }
             val hasReady = allItems.any { it.status.equals("ready", ignoreCase = true) }
-            val showServed = hasReady && !hasPending
+            val hasKot = allItems.any { it.status.equals("kot", ignoreCase = true) }
+
+            val isKds = uiState.kdsEnabled
+            val canServe = if (isKds) hasReady else (hasReady || hasKot)
+            val isCooking = isKds && hasKot && !hasReady && !hasPending
+            val showServed = !hasPending && canServe
             val kotEnabled = !uiState.isSendingKot && hasPending
+
+            val leftButtonText = when {
+                uiState.isSendingKot -> "Sending…"
+                hasPending -> "KOT"
+                showServed -> "Served"
+                isCooking -> "Cooking…"
+                else -> "KOT"
+            }
+            val leftButtonEnabled = when {
+                hasPending -> kotEnabled
+                showServed -> true
+                else -> false
+            }
+            val leftButtonBgColor = when {
+                showServed -> GreenConfirm
+                hasPending -> PinkPrimary
+                else -> Color(0xFF94A3B8)
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -104,14 +128,14 @@ fun OrdersScreen(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Left Button: KOT (pending) or Served (when ready items waiting)
+                    // Left Button: KOT (pending), Cooking... (in kitchen), or Served (when ready)
                     Button(
                         onClick = {
-                            if (showServed) viewModel.markServed() else viewModel.sendKot(context)
+                            if (showServed) viewModel.markServed() else if (hasPending) viewModel.sendKot(context)
                         },
-                        enabled = if (showServed) hasReady else kotEnabled,
+                        enabled = leftButtonEnabled,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (showServed) GreenConfirm else PinkPrimary,
+                            containerColor = leftButtonBgColor,
                             disabledContainerColor = Color.Gray.copy(alpha = 0.4f)
                         ),
                         modifier = Modifier
@@ -122,18 +146,14 @@ fun OrdersScreen(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = when {
-                                uiState.isSendingKot -> "Sending…"
-                                showServed -> "Served"
-                                else -> "KOT"
-                            },
+                            text = leftButtonText,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.White
                         )
                     }
 
-                    // Right Button: Finalize Order (White + Pink Border)
+                    // Right Button: Proceed Bill (White + Pink Border)
                     OutlinedButton(
                         onClick = {
                             viewModel.validateAndFinalize { orderId ->
@@ -150,7 +170,7 @@ fun OrdersScreen(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = "Finalize Order",
+                            text = "Proceed Bill",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = PinkPrimary
@@ -468,7 +488,8 @@ fun OrdersScreen(
                             GuestAccordionCard(
                                 guest = guest,
                                 onAddItemsClick = {
-                                    onNavigateToMenu(order.tableId ?: "1", guest.guestId)
+                                    val targetTableId = order.tableId?.ifBlank { null } ?: uiState.tableId ?: "1"
+                                    onNavigateToMenu(targetTableId, guest.guestId)
                                 },
                                 onQtyChange = { itemId, newQty ->
                                     viewModel.updateItemQty(itemId, newQty)
