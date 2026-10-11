@@ -168,7 +168,9 @@ data class BrandingInfo(
     /** POS Settings.overselling: 1 = allow (soft), 0 = hard-block out of stock. */
     @Json(name = "overselling") val overselling: Int? = 1,
     /** Derived: 1 when overselling=0. */
-    @Json(name = "strict_stock") val strictStock: Int? = 0
+    @Json(name = "strict_stock") val strictStock: Int? = 0,
+    /** Kitchen Display System (1 = Enabled, 0 = Disabled) */
+    @Json(name = "kds_enabled") val kdsEnabled: Int? = 1
 )
 
 @JsonClass(generateAdapter = true)
@@ -181,7 +183,8 @@ data class LoginUser(
     @Json(name = "phone") val phone: String? = null,
     @Json(name = "display_name") val displayName: String? = "Captain / Waiter",
     @Json(name = "role") val role: String? = "Captain", // Captain, Manager, Kitchen
-    @Json(name = "company_id") val companyId: Int? = null
+    @Json(name = "company_id") val companyId: Int? = null,
+    @Json(name = "table_assign") val tableAssign: String? = null
 )
 
 @JsonClass(generateAdapter = true)

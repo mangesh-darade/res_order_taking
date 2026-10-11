@@ -24,6 +24,7 @@ class AuthRepository private constructor() {
         private const val KEY_DISPLAY_NAME = "display_name"
         private const val KEY_EMAIL = "email"
         private const val KEY_ROLE = "role"
+        private const val KEY_TABLE_ASSIGN = "table_assign"
         private const val KEY_SITE_NAME = "site_name"
         private const val KEY_LOGO_URL = "logo_url"
 
@@ -61,7 +62,8 @@ class AuthRepository private constructor() {
                     username = prefs?.getString(KEY_USERNAME, "staff1") ?: "staff1",
                     displayName = prefs?.getString(KEY_DISPLAY_NAME, "Captain / Waiter") ?: "Captain / Waiter",
                     email = prefs?.getString(KEY_EMAIL, "waiter@elintom.com") ?: "waiter@elintom.com",
-                    role = prefs?.getString(KEY_ROLE, "Captain / Waiter") ?: "Captain / Waiter"
+                    role = prefs?.getString(KEY_ROLE, "Captain / Waiter") ?: "Captain / Waiter",
+                    tableAssign = prefs?.getString(KEY_TABLE_ASSIGN, null)
                 )
                 _currentUser.value = user
             }
@@ -164,7 +166,27 @@ class AuthRepository private constructor() {
             ?.putString(KEY_DISPLAY_NAME, user.displayName)
             ?.putString(KEY_EMAIL, user.email)
             ?.putString(KEY_ROLE, user.role)
+            ?.putString(KEY_TABLE_ASSIGN, user.tableAssign)
             ?.apply()
+    }
+
+    suspend fun refreshUserSession(): Result<LoginUser> = withContext(Dispatchers.IO) {
+        val user = _currentUser.value ?: return@withContext Result.failure(Exception("Not logged in"))
+        val userId = user.userId ?: return@withContext Result.failure(Exception("No user id"))
+        try {
+            val response = api.getUserInfo(userId = userId)
+            if (response.isSuccessful && response.body()?.response?.status == "SUCCESS" && response.body()?.data != null) {
+                val updated = response.body()!!.data!!
+                val merged = user.copy(
+                    tableAssign = updated.tableAssign,
+                    displayName = updated.displayName ?: user.displayName
+                )
+                saveUserSession(merged)
+                return@withContext Result.success(merged)
+            }
+        } catch (_: Exception) {
+        }
+        Result.success(user)
     }
 
     suspend fun register(
@@ -269,6 +291,7 @@ class AuthRepository private constructor() {
             ?.remove(KEY_DISPLAY_NAME)
             ?.remove(KEY_EMAIL)
             ?.remove(KEY_ROLE)
+            ?.remove(KEY_TABLE_ASSIGN)
             ?.apply()
     }
 }

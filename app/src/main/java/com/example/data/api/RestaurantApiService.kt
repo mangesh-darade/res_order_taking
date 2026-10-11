@@ -6,20 +6,29 @@ import retrofit2.http.*
 
 interface RestaurantApiService {
 
+    @GET("user_info")
+    suspend fun getUserInfo(
+        @Query("user_id") userId: Int
+    ): Response<ApiResponse<LoginUser>>
+
     @GET("sections")
-    suspend fun getSections(): Response<ApiResponse<List<Section>>>
+    suspend fun getSections(
+        @Query("user_id") userId: Int? = null
+    ): Response<ApiResponse<List<Section>>>
 
     @FormUrlEncoded
     @POST("subsections")
     suspend fun getSubsections(
-        @Field("section_id") sectionId: String
+        @Field("section_id") sectionId: String,
+        @Field("user_id") userId: Int? = null
     ): Response<ApiResponse<List<Subsection>>>
 
     @FormUrlEncoded
     @POST("tables")
     suspend fun getTables(
         @Field("section_id") sectionId: String,
-        @Field("subsection_id") subsectionId: String? = null
+        @Field("subsection_id") subsectionId: String? = null,
+        @Field("user_id") userId: Int? = null
     ): Response<ApiResponse<List<TableItem>>>
 
     @GET("table_statuses")
@@ -96,6 +105,7 @@ interface RestaurantApiService {
     @POST("add_item")
     suspend fun addItem(
         @Field("order_id") orderId: String,
+        @Field("table_id") tableId: String? = null,
         @Field("guest_id") guestId: Int,
         @Field("product_id") productId: String,
         @Field("quantity") quantity: Int,
@@ -189,7 +199,8 @@ interface RestaurantApiService {
     @FormUrlEncoded
     @POST("update_kot_status")
     suspend fun updateKotStatus(
-        @Field("order_id") orderId: String
+        @Field("order_id") orderId: String,
+        @Field("table_id") tableId: String? = null
     ): Response<ApiResponse<OrderBootstrap>>
 
     @FormUrlEncoded
