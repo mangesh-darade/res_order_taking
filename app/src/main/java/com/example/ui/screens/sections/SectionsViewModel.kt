@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.model.Section
 import com.example.data.model.Subsection
+import com.example.data.repository.AuthRepository
 import com.example.data.repository.RestaurantRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +20,7 @@ data class SectionsUiState(
 )
 
 class SectionsViewModel(
-    private val repository: RestaurantRepository = RestaurantRepository()
+    private val repository: RestaurantRepository = RestaurantRepository.getInstance()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SectionsUiState())
@@ -29,10 +30,12 @@ class SectionsViewModel(
         loadSections()
     }
 
+
     fun loadSections() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
-            repository.syncFloorPlanIfOnline()
+            AuthRepository.getInstance().refreshUserSession()
+            repository.syncFloorPlanIfOnline(force = true)
             val result = repository.fetchSections()
             result.onSuccess { list ->
                 val firstSection = list.firstOrNull()
