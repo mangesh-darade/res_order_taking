@@ -22,6 +22,7 @@ import com.example.ui.theme.PinkLightBg
 import com.example.ui.theme.PinkPrimary
 import com.example.ui.theme.TextDark
 import com.example.ui.theme.TextMuted
+import coil.compose.AsyncImage
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -103,17 +104,34 @@ fun TopHeaderBar(
                 }
             }
 
-            // Center: App / Site brand title
+            // Center: App / Site brand title & Logo from settings
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable { showSyncDialog = true }
+                modifier = Modifier
+                    .weight(1.5f, fill = false)
+                    .clickable { showSyncDialog = true }
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.Center
             ) {
+                val logoUrl = branding.logoUrl ?: branding.webshopLogoUrl
+                if (!logoUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = logoUrl,
+                        contentDescription = branding.siteName ?: "Logo",
+                        modifier = Modifier
+                            .height(34.dp)
+                            .padding(end = 8.dp)
+                    )
+                }
+                val brandTitle = branding.siteName?.ifBlank { null } ?: "ELINTOM"
                 Text(
-                    text = (branding.siteName ?: "ELINTOM").uppercase(),
+                    text = brandTitle.uppercase(),
                     color = Color.White,
-                    fontSize = 18.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.2.sp,
+                    letterSpacing = 1.1.sp,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     modifier = Modifier.testTag("app_brand_title")
                 )
                 if (failedCount > 0) {

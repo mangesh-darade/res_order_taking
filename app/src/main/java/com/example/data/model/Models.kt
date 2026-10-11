@@ -148,8 +148,8 @@ data class FinalizeOrderResponse(
 
 @JsonClass(generateAdapter = true)
 data class BrandingInfo(
-    @Json(name = "site_name") val siteName: String? = "Darbar Restaurant",
-    @Json(name = "company_name") val companyName: String? = "Darbar Restaurant",
+    @Json(name = "site_name") val siteName: String? = null,
+    @Json(name = "company_name") val companyName: String? = null,
     @Json(name = "mobile_app_name") val mobileAppName: String? = "Order Taking",
     @Json(name = "login_title") val loginTitle: String? = "Restaurant Order Taking",
     @Json(name = "logo_url") val logoUrl: String? = null,
