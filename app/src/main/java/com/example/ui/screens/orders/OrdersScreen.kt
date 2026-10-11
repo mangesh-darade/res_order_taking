@@ -115,16 +115,19 @@ fun OrdersScreen(
                 else -> Color(0xFF94A3B8)
             }
 
-            Box(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(105.dp)
-                    .background(Color.White)
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                    .testTag("orders_bottom_bar")
+                    .navigationBarsPadding(),
+                color = Color.White,
+                shadowElevation = 8.dp
             ) {
                 Row(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .height(52.dp)
+                        .testTag("orders_bottom_bar"),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -147,7 +150,7 @@ fun OrdersScreen(
                     ) {
                         Text(
                             text = leftButtonText,
-                            fontSize = 20.sp,
+                            fontSize = 19.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.White
                         )
@@ -171,7 +174,7 @@ fun OrdersScreen(
                     ) {
                         Text(
                             text = "Proceed Bill",
-                            fontSize = 18.sp,
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = PinkPrimary
                         )

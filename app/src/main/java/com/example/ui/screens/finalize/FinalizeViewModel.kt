@@ -21,7 +21,7 @@ data class FinalizeUiState(
 )
 
 class FinalizeViewModel(
-    private val repository: RestaurantRepository = RestaurantRepository()
+    private val repository: RestaurantRepository = RestaurantRepository.getInstance()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FinalizeUiState())
