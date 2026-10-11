@@ -36,7 +36,7 @@ class SplashViewModel : ViewModel() {
                 authRepo.fetchBranding()
             } else {
                 BrandingInfo(
-                    siteName = "Order Taking",
+                    siteName = null,
                     loginTitle = "Configure server first",
                     primaryColor = "#E9176B"
                 )

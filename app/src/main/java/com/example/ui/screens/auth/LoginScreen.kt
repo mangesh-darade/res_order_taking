@@ -163,20 +163,17 @@ fun LoginScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                     }
 
-                    Text(
-                        text = uiState.branding.siteName ?: "ElintOm Restaurant",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Black,
-                        color = TextDark
-                    )
-
-                    Text(
-                        text = uiState.branding.loginTitle ?: "Restaurant Order Taking",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = TextMuted,
-                        modifier = Modifier.padding(top = 2.dp, bottom = 20.dp)
-                    )
+                    val siteName = uiState.branding.siteName?.ifBlank { null }
+                    if (!siteName.isNullOrBlank()) {
+                        Text(
+                            text = siteName,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Black,
+                            color = TextDark,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+                    }
 
                     HorizontalDivider(color = Color(0xFFEEEEEE), modifier = Modifier.padding(bottom = 16.dp))
 

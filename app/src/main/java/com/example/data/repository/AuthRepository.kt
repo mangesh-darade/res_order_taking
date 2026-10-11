@@ -68,11 +68,10 @@ class AuthRepository private constructor() {
                 _currentUser.value = user
             }
 
-            val savedSiteName = prefs?.getString(KEY_SITE_NAME, "ElintOm Restaurant")
+            val savedSiteName = prefs?.getString(KEY_SITE_NAME, null)
             val savedLogoUrl = prefs?.getString(KEY_LOGO_URL, null)
             _branding.value = BrandingInfo(
                 siteName = savedSiteName,
-                loginTitle = "Restaurant Order Taking",
                 logoUrl = savedLogoUrl
             )
         }
@@ -103,11 +102,8 @@ class AuthRepository private constructor() {
         } catch (_: Exception) {
         }
         val fallback = BrandingInfo(
-            siteName = "ElintOm Restaurant",
-            companyName = "ElintOm Dining",
-            mobileAppName = "Order Taking",
-            loginTitle = "Restaurant Order Taking",
-            logoUrl = null,
+            siteName = prefs?.getString(KEY_SITE_NAME, null),
+            logoUrl = prefs?.getString(KEY_LOGO_URL, null),
             primaryColor = "#E9176B"
         )
         _branding.value = fallback

@@ -84,20 +84,16 @@ fun SplashScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            Text(
-                text = uiState.branding.siteName ?: "ElintOm Restaurant",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = TextDark
-            )
-
-            Text(
-                text = uiState.branding.loginTitle ?: "Restaurant Order Taking",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = TextMuted,
-                modifier = Modifier.padding(top = 4.dp)
-            )
+            val siteName = uiState.branding.siteName?.ifBlank { null }
+            if (!siteName.isNullOrBlank()) {
+                Text(
+                    text = siteName,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = TextDark,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
 
             Spacer(modifier = Modifier.height(36.dp))
 

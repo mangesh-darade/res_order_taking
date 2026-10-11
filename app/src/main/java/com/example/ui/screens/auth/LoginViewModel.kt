@@ -38,7 +38,7 @@ class LoginViewModel : ViewModel() {
                 authRepo.fetchBranding()
             } else {
                 BrandingInfo(
-                    siteName = "Order Taking",
+                    siteName = null,
                     loginTitle = "Configure API server to continue",
                     primaryColor = "#E9176B"
                 )

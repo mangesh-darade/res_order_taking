@@ -150,8 +150,8 @@ data class FinalizeOrderResponse(
 data class BrandingInfo(
     @Json(name = "site_name") val siteName: String? = null,
     @Json(name = "company_name") val companyName: String? = null,
-    @Json(name = "mobile_app_name") val mobileAppName: String? = "Order Taking",
-    @Json(name = "login_title") val loginTitle: String? = "Restaurant Order Taking",
+    @Json(name = "mobile_app_name") val mobileAppName: String? = null,
+    @Json(name = "login_title") val loginTitle: String? = null,
     @Json(name = "logo_url") val logoUrl: String? = null,
     @Json(name = "webshop_logo_url") val webshopLogoUrl: String? = null,
     @Json(name = "primary_color") val primaryColor: String? = "#E9176B",
