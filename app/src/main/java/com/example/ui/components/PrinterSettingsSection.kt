@@ -566,7 +566,7 @@ fun DivisionPrinterCard(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text("Line Spacing (अंतर)", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = TextDark)
+                                Text("Line Spacing", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = TextDark)
                                 Text("Compact saves paper, Wide improves readability", fontSize = 10.sp, color = TextMuted)
                             }
                         }
@@ -588,7 +588,7 @@ fun DivisionPrinterCard(
                                     modifier = Modifier
                                         .weight(1f)
                                         .clickable { onConfigChanged(config.copy(lineSpacing = dots)) }
-                                        .padding(vertical = 4.dp),
+                                        .padding(vertical = 4.dp)
                                 ) {
                                     Column(
                                         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
@@ -630,7 +630,7 @@ fun DivisionPrinterCard(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text("Print Copies (प्रती)", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = TextDark)
+                                Text("Print Copies", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = TextDark)
                                 Text("Number of duplicate KOT slips to print", fontSize = 10.sp, color = TextMuted)
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
