@@ -92,14 +92,14 @@ fun OfflineGraceOverlay() {
                     Spacer(modifier = Modifier.height(14.dp))
 
                     Text(
-                        text = "इंटरनेट कनेक्शन गेले आहे!",
+                        text = "Internet Connection Lost!",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFD84315),
                         textAlign = TextAlign.Center
                     )
                     Text(
-                        text = "Warning: Internet Connection Lost",
+                        text = "Offline Mode Warning",
                         fontSize = 12.sp,
                         color = Color.Gray,
                         textAlign = TextAlign.Center
@@ -108,7 +108,7 @@ fun OfflineGraceOverlay() {
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = "३० सेकंदांपैकी शेवटचे $remaining सेकंद शिल्लक आहेत. ॲप लॉक होण्यापूर्वी कृपया ताबडतोब Wi-Fi किंवा इंटरनेट कनेक्ट करा!",
+                        text = "Last $remaining seconds of offline mode remaining. Please connect to Wi-Fi or mobile data to continue taking orders without interruption.",
                         fontSize = 13.sp,
                         color = Color(0xFF37474F),
                         textAlign = TextAlign.Center,
@@ -124,7 +124,7 @@ fun OfflineGraceOverlay() {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "समजले / Continue ($remaining s)",
+                            text = "Dismiss / Continue ($remaining s)",
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
@@ -170,14 +170,14 @@ fun OfflineGraceOverlay() {
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "इंटरनेट कनेक्शन आवश्यक आहे",
+                        text = "Internet Connection Required",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color(0xFFB71C1C),
                         textAlign = TextAlign.Center
                     )
                     Text(
-                        text = "Internet Connection Required",
+                        text = "Offline Limit Exceeded",
                         fontSize = 12.sp,
                         color = Color.Gray,
                         textAlign = TextAlign.Center
@@ -193,20 +193,20 @@ fun OfflineGraceOverlay() {
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text(
-                                text = "• ३० सेकंदांची ऑफलाइन मुदत संपली आहे.",
+                                text = "• 30 seconds offline limit reached.",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFF263238)
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "• डेटा सुरक्षित ठेवण्यासाठी नवीन ऑर्डर्स घेणे तात्पुरते थांबवले आहे.",
+                                text = "• Order taking is paused to prevent table desync.",
                                 fontSize = 12.sp,
                                 color = Color(0xFF455A64)
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "✅ मागील ३० सेकंदांतील सर्व डेटा सुरक्षित आहे. इंटरनेट येताच तो आपोआप सिंक व रिस्टोअर होईल.",
+                                text = "✓ All your orders from the last 30 seconds are safely saved locally and will auto-sync once connected.",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color(0xFF2E7D32)
@@ -217,7 +217,7 @@ fun OfflineGraceOverlay() {
                     if (connectionCheckFailed) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "अजूनही इंटरनेट सुरू झालेले नाही. कृपया Wi-Fi चालू करा.",
+                            text = "Still not connected. Please turn on Wi-Fi or mobile data.",
                             fontSize = 11.sp,
                             color = Color(0xFFD32F2F),
                             textAlign = TextAlign.Center
@@ -253,7 +253,7 @@ fun OfflineGraceOverlay() {
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("तपासत आहे... / Checking...", color = Color.White)
+                            Text("Checking connection...", color = Color.White)
                         } else {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
@@ -263,7 +263,7 @@ fun OfflineGraceOverlay() {
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "इंटरनेट पुन्हा तपासा (Retry)",
+                                text = "Retry Connection",
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
                                 fontSize = 14.sp
@@ -304,13 +304,13 @@ fun OfflineGraceOverlay() {
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "इंटरनेट पूर्ववत झाले! (Internet Restored)",
+                        text = "Internet Restored!",
                         color = Color.White,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "मागील ३० सेकंदांचा डेटा सिंक झाला असून ॲप Live झाले आहे.",
+                        text = "All offline orders synced successfully. App is now live.",
                         color = Color.White.copy(alpha = 0.9f),
                         fontSize = 11.sp
                     )

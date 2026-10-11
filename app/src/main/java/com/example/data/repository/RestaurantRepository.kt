@@ -466,7 +466,7 @@ class RestaurantRepository private constructor() {
             // fallback
         }
         if (syncManager?.isGracePeriodExpired?.value == true) {
-            return@withContext Result.failure(Exception("३० सेकंदांची ऑफलाइन मुदत संपली आहे. कृपया इंटरनेट कनेक्ट करा."))
+            return@withContext Result.failure(Exception("30s offline time limit exceeded. Please connect to internet."))
         }
         // Always create a clean fresh order state for new table session
         val table = _tables.value.find { it.id == tableId }
@@ -817,7 +817,7 @@ class RestaurantRepository private constructor() {
             // fallback offline
         }
         if (syncManager?.isGracePeriodExpired?.value == true) {
-            return@withContext Result.failure(Exception("३० सेकंदांची ऑफलाइन मुदत संपली आहे. कृपया इंटरनेट कनेक्ट करा."))
+            return@withContext Result.failure(Exception("30s offline time limit exceeded. Please connect to internet."))
         }
         if (strict && (productCheck?.inStock == false || (productCheck?.stockQty != null && productCheck.stockQty < quantity))) {
             return@withContext Result.failure(Exception("Out of stock"))
@@ -1122,7 +1122,7 @@ class RestaurantRepository private constructor() {
         }.orEmpty()
         val unserved = activeItems.filterNot { it.status.equals("served", ignoreCase = true) }
         if (unserved.isNotEmpty()) {
-            return@withContext Result.failure(Exception("जोपर्यंत सर्व आयटम्स Served होत नाहीत, तोपर्यंत बिल जनरेट होणार नाही."))
+            return@withContext Result.failure(Exception("All items must be Served before generating bill."))
         }
         try {
             val response = api.finalizeOrder(orderId)
