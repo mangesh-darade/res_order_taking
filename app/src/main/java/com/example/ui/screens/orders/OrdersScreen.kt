@@ -57,6 +57,7 @@ fun OrdersScreen(
     var tableDropdownExpanded by remember { mutableStateOf(false) }
     var showGridPopup by remember { mutableStateOf(false) }
     var gridPopupInitialGuest by remember { mutableStateOf<Int?>(null) }
+    var showProceedBillConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(initialTableId) {
         if (initialTableId != null) {
@@ -159,8 +160,8 @@ fun OrdersScreen(
                     // Right Button: Proceed Bill (White + Pink Border)
                     OutlinedButton(
                         onClick = {
-                            viewModel.validateAndFinalize { orderId ->
-                                onNavigateToFinalize(orderId)
+                            viewModel.validateAndFinalize {
+                                showProceedBillConfirm = true
                             }
                         },
                         colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White),
@@ -506,6 +507,49 @@ fun OrdersScreen(
                 }
             }
         }
+    }
+
+    if (showProceedBillConfirm) {
+        val tableNum = uiState.order?.tableNumber ?: uiState.tablesList.find { it.id == uiState.tableId }?.tableNumber ?: "Current Table"
+        val totalAmt = CurrencyConfig.format(uiState.order?.grandTotal ?: 0.0)
+        AlertDialog(
+            onDismissRequest = { showProceedBillConfirm = false },
+            title = {
+                Text(
+                    text = "Proceed to Bill?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to proceed with billing Table $tableNum?\nTotal Amount: $totalAmt\n\nThis will send the bill for settlement.",
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showProceedBillConfirm = false
+                        viewModel.validateAndFinalize { orderId ->
+                            onNavigateToFinalize(orderId)
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Proceed", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showProceedBillConfirm = false },
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
