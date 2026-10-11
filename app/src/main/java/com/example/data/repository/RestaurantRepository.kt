@@ -465,6 +465,9 @@ class RestaurantRepository private constructor() {
         } catch (e: Exception) {
             // fallback
         }
+        if (syncManager?.isGracePeriodExpired?.value == true) {
+            return@withContext Result.failure(Exception("३० सेकंदांची ऑफलाइन मुदत संपली आहे. कृपया इंटरनेट कनेक्ट करा."))
+        }
         // Always create a clean fresh order state for new table session
         val table = _tables.value.find { it.id == tableId }
         val newOrderId = "ORD-$tableId-${System.currentTimeMillis() % 10000}"
@@ -812,6 +815,9 @@ class RestaurantRepository private constructor() {
             }
         } catch (e: Exception) {
             // fallback offline
+        }
+        if (syncManager?.isGracePeriodExpired?.value == true) {
+            return@withContext Result.failure(Exception("३० सेकंदांची ऑफलाइन मुदत संपली आहे. कृपया इंटरनेट कनेक्ट करा."))
         }
         if (strict && (productCheck?.inStock == false || (productCheck?.stockQty != null && productCheck.stockQty < quantity))) {
             return@withContext Result.failure(Exception("Out of stock"))

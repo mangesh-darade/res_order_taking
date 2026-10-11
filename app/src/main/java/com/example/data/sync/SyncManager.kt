@@ -38,6 +38,19 @@ class SyncManager private constructor(context: Context) {
 
     val isOnline: StateFlow<Boolean> = networkMonitor.isOnline
 
+    private var offlineTimerJob: Job? = null
+    private val _offlineRemainingSeconds = MutableStateFlow<Int?>(null)
+    /** Remaining seconds in the 30s offline window (30 down to 0). Null when online. */
+    val offlineRemainingSeconds: StateFlow<Int?> = _offlineRemainingSeconds.asStateFlow()
+
+    private val _isGracePeriodExpired = MutableStateFlow(false)
+    /** True when offline duration has reached/exceeded 30 seconds and order taking should lock. */
+    val isGracePeriodExpired: StateFlow<Boolean> = _isGracePeriodExpired.asStateFlow()
+
+    private val _justRestoredOnline = MutableStateFlow(false)
+    /** True for 4s right after internet reconnection to notify user that data is live & synced. */
+    val justRestoredOnline: StateFlow<Boolean> = _justRestoredOnline.asStateFlow()
+
     val pendingCountFlow: Flow<Int> = dao.getPendingCountFlow()
     val failedCountFlow: Flow<Int> = dao.getFailedCountFlow()
     val allActionsFlow: Flow<List<PendingSyncEntity>> = dao.getAllActionsFlow()
@@ -62,10 +75,28 @@ class SyncManager private constructor(context: Context) {
 
     init {
         loadIdMaps()
+        var wasOffline = !networkMonitor.isOnline.value
+        if (wasOffline) {
+            startOfflineCountdown()
+        }
         scope.launch {
             networkMonitor.isOnline.collect { online ->
                 if (online) {
+                    offlineTimerJob?.cancel()
+                    _offlineRemainingSeconds.value = null
+                    _isGracePeriodExpired.value = false
+                    if (wasOffline) {
+                        _justRestoredOnline.value = true
+                        scope.launch {
+                            delay(4000)
+                            _justRestoredOnline.value = false
+                        }
+                    }
+                    wasOffline = false
                     runPendingSyncPass()
+                } else {
+                    wasOffline = true
+                    startOfflineCountdown()
                 }
             }
         }
@@ -73,6 +104,31 @@ class SyncManager private constructor(context: Context) {
         try {
             SyncWorker.schedulePeriodicSync(appContext)
         } catch (_: Exception) {}
+    }
+
+    private fun startOfflineCountdown() {
+        offlineTimerJob?.cancel()
+        offlineTimerJob = scope.launch {
+            _isGracePeriodExpired.value = false
+            for (sec in OFFLINE_GRACE_PERIOD_SECONDS downTo 0) {
+                _offlineRemainingSeconds.value = sec
+                if (sec == 0) {
+                    _isGracePeriodExpired.value = true
+                }
+                delay(1000)
+            }
+        }
+    }
+
+    fun retryConnection(): Boolean {
+        val connected = networkMonitor.refreshNetworkState()
+        if (connected) {
+            offlineTimerJob?.cancel()
+            _offlineRemainingSeconds.value = null
+            _isGracePeriodExpired.value = false
+            syncPendingActions()
+        }
+        return connected
     }
 
     suspend fun enqueueAction(orderId: String?, actionType: String, payloadMap: Map<String, Any?>) {
@@ -643,6 +699,8 @@ class SyncManager private constructor(context: Context) {
     }
 
     companion object {
+        const val OFFLINE_GRACE_PERIOD_SECONDS = 30
+        const val OFFLINE_ALERT_THRESHOLD_SECONDS = 5
         private const val PREFS_NAME = "ordertaking_sync_maps"
         private const val KEY_ORDER_MAP = "order_id_map"
         private const val KEY_ITEM_MAP = "item_id_map"

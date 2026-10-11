@@ -39,4 +39,10 @@ class NetworkMonitor(context: Context) {
         val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
+
+    fun refreshNetworkState(): Boolean {
+        val state = checkInitialNetworkState()
+        _isOnline.value = state
+        return state
+    }
 }

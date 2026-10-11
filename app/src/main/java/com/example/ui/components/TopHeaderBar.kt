@@ -47,6 +47,8 @@ fun TopHeaderBar(
     val pendingCount by syncManager.pendingCountFlow.collectAsState(initial = 0)
     val failedCount by syncManager.failedCountFlow.collectAsState(initial = 0)
     val isSyncing by syncManager.isSyncing.collectAsState()
+    val offlineRemainingSeconds by syncManager.offlineRemainingSeconds.collectAsState()
+    val isGracePeriodExpired by syncManager.isGracePeriodExpired.collectAsState()
 
     var showSyncDialog by remember { mutableStateOf(false) }
 
@@ -80,17 +82,33 @@ fun TopHeaderBar(
                         fontWeight = FontWeight.Bold
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        val statusDotColor = when {
+                            failedCount > 0 -> Color(0xFFF44336)
+                            !isOnline -> if (isGracePeriodExpired) Color(0xFFD32F2F) else Color(0xFFFF9800)
+                            pendingCount > 0 -> Color(0xFFFFC107)
+                            else -> Color(0xFF4CAF50)
+                        }
                         Surface(
                             shape = CircleShape,
-                            color = if (failedCount > 0) Color(0xFFF44336) else if (!isOnline) Color(0xFFFF9800) else if (pendingCount > 0) Color(0xFFFFC107) else Color(0xFF4CAF50),
+                            color = statusDotColor,
                             modifier = Modifier.size(7.dp)
                         ) {}
                         Spacer(modifier = Modifier.width(4.dp))
+                        val statusText = when {
+                            failedCount > 0 -> "SYNC FAILED ($failedCount)"
+                            !isOnline -> {
+                                if (isGracePeriodExpired) "OFFLINE LOCKED ($pendingCount)"
+                                else if (offlineRemainingSeconds != null) "OFFLINE: ${offlineRemainingSeconds}s ($pendingCount)"
+                                else "OFFLINE ($pendingCount)"
+                            }
+                            pendingCount > 0 -> "SYNCING ($pendingCount)"
+                            else -> currentUser?.role ?: "Captain"
+                        }
                         Text(
-                            text = if (failedCount > 0) "SYNC FAILED ($failedCount)" else if (!isOnline) "OFFLINE (${pendingCount})" else if (pendingCount > 0) "SYNCING (${pendingCount})" else (currentUser?.role ?: "Captain"),
-                            color = if (failedCount > 0) Color(0xFFFFCDD2) else Color.White.copy(alpha = 0.9f),
+                            text = statusText,
+                            color = if (failedCount > 0 || isGracePeriodExpired) Color(0xFFFFCDD2) else Color.White.copy(alpha = 0.9f),
                             fontSize = 10.sp,
-                            fontWeight = if (failedCount > 0) FontWeight.Bold else FontWeight.Medium
+                            fontWeight = if (failedCount > 0 || isGracePeriodExpired) FontWeight.Bold else FontWeight.Medium
                         )
                     }
                 } else {

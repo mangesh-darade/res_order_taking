@@ -1,5 +1,8 @@
 package com.example.ui.navigation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
 import androidx.compose.runtime.*
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -8,6 +11,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.ui.components.MainTab
+import com.example.ui.components.OfflineGraceOverlay
 import com.example.ui.screens.auth.ForgotPasswordScreen
 import com.example.ui.screens.auth.LoginScreen
 import com.example.ui.screens.auth.RegisterScreen
@@ -65,10 +69,11 @@ fun AppNavigation(
         }
     }
 
-    NavHost(
-        navController = navController,
-        startDestination = Routes.SPLASH
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        NavHost(
+            navController = navController,
+            startDestination = Routes.SPLASH
+        ) {
         // Auth: Splash
         composable(Routes.SPLASH) {
             SplashScreen(
@@ -255,5 +260,8 @@ fun AppNavigation(
             )
         }
     }
+
+    OfflineGraceOverlay()
+}
 }
 
