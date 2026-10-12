@@ -91,6 +91,10 @@ fun OrdersScreen(
             val hasPending = allItems.any { it.status.equals("pending", ignoreCase = true) }
             val hasReady = allItems.any { it.status.equals("ready", ignoreCase = true) }
             val hasKot = allItems.any { it.status.equals("kot", ignoreCase = true) }
+            val allServed = allItems.isNotEmpty() && allItems.all {
+                val s = it.status?.lowercase()?.trim().orEmpty()
+                s == "served" || s == "cancelled" || s == "canceled"
+            }
 
             val isKds = uiState.kdsEnabled
             val canServe = if (isKds) hasReady else (hasReady || hasKot)
@@ -103,6 +107,7 @@ fun OrdersScreen(
                 hasPending -> "KOT"
                 showServed -> "Served"
                 isCooking -> "Cooking…"
+                allServed -> "Served"
                 else -> "KOT"
             }
             val leftButtonEnabled = when {
@@ -397,11 +402,16 @@ fun OrdersScreen(
                         OrderItemsGridDialog(
                             order = order,
                             initialGuestFilter = gridPopupInitialGuest,
+                            isKdsEnabled = uiState.kdsEnabled,
+                            isSendingKot = uiState.isSendingKot,
                             onQtyChange = { itemId, newQty ->
                                 viewModel.updateItemQty(itemId, newQty)
                             },
                             onKotClick = {
                                 viewModel.sendKot(context)
+                            },
+                            onServeClick = {
+                                viewModel.markServed()
                             },
                             onDismissRequest = { showGridPopup = false }
                         )

@@ -42,8 +42,11 @@ data class GridItemDisplay(
 fun OrderItemsGridDialog(
     order: OrderBootstrap,
     initialGuestFilter: Int? = null,
+    isKdsEnabled: Boolean = false,
+    isSendingKot: Boolean = false,
     onQtyChange: (itemId: String, newQty: Int) -> Unit,
     onKotClick: () -> Unit,
+    onServeClick: (() -> Unit)? = null,
     onDismissRequest: () -> Unit
 ) {
     // -1 = All Items, 0 = Table Items, 1..N = Specific Guest
@@ -67,6 +70,45 @@ fun OrderItemsGridDialog(
         } else {
             allGridItems.filter { it.guestId == selectedFilter }
         }
+    }
+
+    val allOrderItems = remember(allGridItems) { allGridItems.map { it.item } }
+    val hasPending = allOrderItems.any { it.status.equals("pending", ignoreCase = true) }
+    val hasReady = allOrderItems.any { it.status.equals("ready", ignoreCase = true) }
+    val hasKot = allOrderItems.any { it.status.equals("kot", ignoreCase = true) }
+
+    val canServe = if (isKdsEnabled) hasReady else (hasReady || hasKot)
+    val isCooking = isKdsEnabled && hasKot && !hasReady && !hasPending
+    val showServed = !hasPending && canServe
+    val allServed = allOrderItems.isNotEmpty() && allOrderItems.all {
+        val s = it.status?.lowercase()?.trim().orEmpty()
+        s == "served" || s == "cancelled" || s == "canceled"
+    }
+
+    val actionButtonText = when {
+        isSendingKot -> "Sending…"
+        hasPending -> "Send KOT"
+        showServed -> "Served"
+        isCooking -> "Cooking…"
+        allServed -> "Served"
+        else -> "Send KOT"
+    }
+
+    val actionButtonEnabled = when {
+        hasPending -> !isSendingKot
+        showServed -> true
+        else -> false
+    }
+
+    val actionButtonBgColor = when {
+        showServed -> GreenConfirm
+        hasPending -> PinkPrimary
+        else -> Color(0xFF94A3B8)
+    }
+
+    val actionIcon = when {
+        showServed -> Icons.Default.Check
+        else -> Icons.Default.Restaurant
     }
 
     Dialog(
@@ -248,20 +290,33 @@ fun OrderItemsGridDialog(
 
                         Button(
                             onClick = {
-                                onKotClick()
+                                if (showServed) {
+                                    onServeClick?.invoke()
+                                } else if (hasPending) {
+                                    onKotClick()
+                                }
                                 onDismissRequest()
                             },
+                            enabled = actionButtonEnabled,
                             shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary)
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = actionButtonBgColor,
+                                disabledContainerColor = Color.Gray.copy(alpha = 0.35f),
+                                disabledContentColor = Color.White.copy(alpha = 0.7f)
+                            )
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Restaurant,
+                                imageVector = actionIcon,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
-                                tint = Color.White
+                                tint = if (actionButtonEnabled) Color.White else Color.White.copy(alpha = 0.7f)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Send KOT", fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(
+                                text = actionButtonText,
+                                fontWeight = FontWeight.Bold,
+                                color = if (actionButtonEnabled) Color.White else Color.White.copy(alpha = 0.7f)
+                            )
                         }
                     }
                 }
