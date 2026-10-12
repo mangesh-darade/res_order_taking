@@ -1194,15 +1194,19 @@ class RestaurantRepository private constructor() {
     suspend fun reserveTable(
         tableId: String,
         reservedBy: String,
+        reservedFrom: String? = null,
         reservedUntil: String,
         reservedNote: String? = null,
+        customerPhone: String? = null,
+        guestCount: Int? = 1,
+        reservationId: String? = null,
         updateExisting: Boolean = false
     ): Result<Boolean> = withContext(Dispatchers.IO) {
         val applyLocal = {
             updateTableStatus(
                 tableId = tableId,
                 newStatus = "reserved",
-                guests = 0,
+                guests = guestCount ?: 0,
                 orderId = null,
                 reservedBy = reservedBy,
                 reservedUntil = reservedUntil,
@@ -1218,8 +1222,12 @@ class RestaurantRepository private constructor() {
                 mapOf(
                     "tableId" to tableId,
                     "reservedBy" to reservedBy,
+                    "reservedFrom" to reservedFrom,
                     "reservedUntil" to reservedUntil,
                     "reservedNote" to reservedNote,
+                    "customerPhone" to customerPhone,
+                    "guestCount" to (guestCount ?: 1),
+                    "reservationId" to reservationId,
                     "updateExisting" to if (updateExisting) 1 else 0
                 )
             )
@@ -1234,12 +1242,20 @@ class RestaurantRepository private constructor() {
             val response = api.reserveTable(
                 tableId = tableId,
                 reservedBy = reservedBy,
+                reservedFrom = reservedFrom,
                 reservedUntil = reservedUntil,
                 reservedNote = reservedNote,
+                customerPhone = customerPhone,
+                guestCount = guestCount,
+                reservationId = reservationId,
                 updateExisting = if (updateExisting) 1 else 0
             )
             if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
-                applyLocal()
+                val data = response.body()?.data
+                val isActiveNow = data?.get("is_active_now")?.toString() != "0"
+                if (isActiveNow) {
+                    applyLocal()
+                }
                 return@withContext Result.success(true)
             }
             val err = response.body()?.response?.error
@@ -1293,6 +1309,44 @@ class RestaurantRepository private constructor() {
             return@withContext Result.failure(Exception(err))
         } catch (e: Exception) {
             enqueueOffline()
+        }
+    }
+
+    suspend fun getTableReservations(
+        tableId: String? = null,
+        date: String? = null
+    ): Result<List<TableReservation>> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.getTableReservations(tableId = tableId, date = date)
+            if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
+                val list = response.body()?.data.orEmpty()
+                return@withContext Result.success(list)
+            }
+            val err = response.body()?.response?.error
+                ?: response.errorBody()?.string()?.let { raw ->
+                    Regex("\"error\"\\s*:\\s*\"([^\"]+)\"").find(raw)?.groupValues?.getOrNull(1)
+                }
+                ?: "Failed to fetch reservations"
+            Result.failure(Exception(err))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun cancelReservation(reservationId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.cancelReservation(reservationId = reservationId)
+            if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
+                return@withContext Result.success(true)
+            }
+            val err = response.body()?.response?.error
+                ?: response.errorBody()?.string()?.let { raw ->
+                    Regex("\"error\"\\s*:\\s*\"([^\"]+)\"").find(raw)?.groupValues?.getOrNull(1)
+                }
+                ?: "Failed to cancel reservation"
+            Result.failure(Exception(err))
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 

@@ -24,11 +24,18 @@ data class TablesUiState(
     val isFilterByAssigned: Boolean = true,
     val hasAssignedTables: Boolean = false,
     val assignedCount: Int = 0,
+    val searchQuery: String = "",
+    val statusFilter: String = "ALL", // "ALL", "AVAILABLE", "OCCUPIED", "RESERVED", "FREE"
+    val availableSections: List<com.example.data.model.Section> = emptyList(),
+    val availableSubsections: List<com.example.data.model.Subsection> = emptyList(),
     val confirmDialogTable: TableItem? = null,
     val reserveDialogTable: TableItem? = null,
     val opsDialogTable: TableItem? = null,
     val freeActionsDialogTable: TableItem? = null,
     val pickTargetMode: String? = null, // "transfer" | "merge"
+    val reservationsDialogTable: TableItem? = null,
+    val tableReservations: List<com.example.data.model.TableReservation> = emptyList(),
+    val isLoadingReservations: Boolean = false,
     val snackbarMessage: String? = null
 )
 
@@ -43,6 +50,7 @@ class TablesViewModel(
 
     init {
         startAutoRefresh()
+        loadAvailableSectionsAndSubsections()
     }
 
     private fun getAssignedTableIds(): Set<String> {
@@ -59,21 +67,164 @@ class TablesViewModel(
                assignedIds.any { id -> table.tableNumber.equals("T$id", ignoreCase = true) || table.tableNumber.equals(id, ignoreCase = true) }
     }
 
-    private fun applyFilter(list: List<TableItem>, filterAssigned: Boolean): List<TableItem> {
+    private fun computeFilteredTables(
+        sourceList: List<TableItem>,
+        query: String = _uiState.value.searchQuery,
+        statusFilter: String = _uiState.value.statusFilter,
+        filterAssigned: Boolean = _uiState.value.isFilterByAssigned
+    ): List<TableItem> {
         val assignedIds = getAssignedTableIds()
-        if (!filterAssigned || assignedIds.isEmpty()) {
-            return list
+        var result = if (filterAssigned && assignedIds.isNotEmpty()) {
+            sourceList.filter { isTableAssigned(it, assignedIds) }
+        } else {
+            sourceList
         }
-        return list.filter { isTableAssigned(it, assignedIds) }
+
+        if (statusFilter != "ALL") {
+            result = result.filter { table ->
+                val st = table.status.lowercase()
+                when (statusFilter) {
+                    "AVAILABLE" -> st == "available"
+                    "OCCUPIED" -> st in listOf("occupied", "order-placed", "placed", "kitchen", "kot_sent", "ready", "served")
+                    "RESERVED" -> st == "reserved"
+                    "FREE" -> st in listOf("free", "billed")
+                    else -> true
+                }
+            }
+        }
+
+        val q = query.trim().lowercase()
+        if (q.isNotEmpty()) {
+            result = result.filter { table ->
+                table.tableNumber.lowercase().contains(q) ||
+                table.reservedBy?.lowercase()?.contains(q) == true ||
+                table.status.lowercase().contains(q) ||
+                table.statusLabel?.lowercase()?.contains(q) == true
+            }
+        }
+
+        return result
     }
 
     fun toggleAssignedFilter() {
         val nextFilter = !_uiState.value.isFilterByAssigned
-        val displayed = applyFilter(_uiState.value.allTables, nextFilter)
+        val displayed = computeFilteredTables(
+            sourceList = _uiState.value.allTables,
+            filterAssigned = nextFilter
+        )
         _uiState.value = _uiState.value.copy(
             isFilterByAssigned = nextFilter,
             tables = displayed
         )
+    }
+
+    fun onSearchQueryChanged(query: String) {
+        val displayed = computeFilteredTables(
+            sourceList = _uiState.value.allTables,
+            query = query
+        )
+        _uiState.value = _uiState.value.copy(
+            searchQuery = query,
+            tables = displayed
+        )
+    }
+
+    fun onStatusFilterChanged(status: String) {
+        val displayed = computeFilteredTables(
+            sourceList = _uiState.value.allTables,
+            statusFilter = status
+        )
+        _uiState.value = _uiState.value.copy(
+            statusFilter = status,
+            tables = displayed
+        )
+    }
+
+    fun resetAllFilters() {
+        val displayed = computeFilteredTables(
+            sourceList = _uiState.value.allTables,
+            query = "",
+            statusFilter = "ALL"
+        )
+        _uiState.value = _uiState.value.copy(
+            searchQuery = "",
+            statusFilter = "ALL",
+            tables = displayed
+        )
+    }
+
+    fun loadAvailableSectionsAndSubsections() {
+        viewModelScope.launch {
+            val secRes = repository.fetchSections()
+            secRes.onSuccess { sections ->
+                var currentSecId = _uiState.value.sectionId
+                var currentSecName = _uiState.value.sectionName
+                if (sections.size == 1 && currentSecId.isBlank()) {
+                    currentSecId = sections.first().id
+                    currentSecName = sections.first().name
+                }
+                _uiState.value = _uiState.value.copy(
+                    availableSections = sections,
+                    sectionId = currentSecId,
+                    sectionName = currentSecName
+                )
+                if (currentSecId.isNotBlank()) {
+                    val subRes = repository.fetchSubsections(currentSecId)
+                    subRes.onSuccess { subs ->
+                        var subId = _uiState.value.subsectionId
+                        var subName = _uiState.value.subsectionName
+                        if (subs.size == 1) {
+                            subId = subs.first().id
+                            subName = subs.first().name
+                        } else if (subs.isEmpty()) {
+                            subId = null
+                            subName = null
+                        }
+                        _uiState.value = _uiState.value.copy(
+                            availableSubsections = subs,
+                            subsectionId = subId,
+                            subsectionName = subName
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun selectSectionFilter(sec: com.example.data.model.Section?) {
+        val secId = sec?.id.orEmpty()
+        val secName = sec?.name.orEmpty()
+        _uiState.value = _uiState.value.copy(
+            sectionId = secId,
+            sectionName = secName,
+            subsectionId = null,
+            subsectionName = null,
+            availableSubsections = emptyList()
+        )
+        if (secId.isNotBlank()) {
+            viewModelScope.launch {
+                val subRes = repository.fetchSubsections(secId)
+                subRes.onSuccess { subs ->
+                    val autoSub = if (subs.size == 1) subs.first() else null
+                    _uiState.value = _uiState.value.copy(
+                        availableSubsections = subs,
+                        subsectionId = autoSub?.id,
+                        subsectionName = autoSub?.name
+                    )
+                    loadTables(silent = false)
+                }
+            }
+        } else {
+            loadTables(silent = false)
+        }
+    }
+
+    fun selectSubsectionFilter(sub: com.example.data.model.Subsection?) {
+        _uiState.value = _uiState.value.copy(
+            subsectionId = sub?.id,
+            subsectionName = sub?.name
+        )
+        loadTables(silent = false)
     }
 
     fun startAutoRefresh() {
@@ -99,6 +250,7 @@ class TablesViewModel(
             subsectionId = subId,
             subsectionName = subName
         )
+        loadAvailableSectionsAndSubsections()
         loadTables(silent = false)
     }
 
@@ -123,8 +275,7 @@ class TablesViewModel(
             result.onSuccess { list ->
                 val assignedIds = getAssignedTableIds()
                 val hasAssigned = assignedIds.isNotEmpty()
-                val filterActive = _uiState.value.isFilterByAssigned && hasAssigned
-                val displayed = applyFilter(list, filterActive)
+                val displayed = computeFilteredTables(sourceList = list)
                 val countAssigned = list.count { isTableAssigned(it, assignedIds) }
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -161,6 +312,7 @@ class TablesViewModel(
         _uiState.value = _uiState.value.copy(
             confirmDialogTable = null,
             reserveDialogTable = null,
+            reservationsDialogTable = null,
             opsDialogTable = null,
             freeActionsDialogTable = null,
             pickTargetMode = null
@@ -170,8 +322,60 @@ class TablesViewModel(
     fun showReserveDialog(table: TableItem) {
         _uiState.value = _uiState.value.copy(
             reserveDialogTable = table,
+            reservationsDialogTable = null,
             freeActionsDialogTable = null
         )
+    }
+
+    fun showReservationsDialog(table: TableItem) {
+        _uiState.value = _uiState.value.copy(
+            reservationsDialogTable = table,
+            reserveDialogTable = null,
+            isLoadingReservations = true,
+            tableReservations = emptyList()
+        )
+        loadTableReservations(table.id)
+    }
+
+    fun dismissReservationsDialog() {
+        _uiState.value = _uiState.value.copy(
+            reservationsDialogTable = null,
+            tableReservations = emptyList(),
+            isLoadingReservations = false
+        )
+    }
+
+    fun loadTableReservations(tableId: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingReservations = true)
+            val result = repository.getTableReservations(tableId = tableId)
+            result.onSuccess { list ->
+                _uiState.value = _uiState.value.copy(
+                    tableReservations = list,
+                    isLoadingReservations = false
+                )
+            }.onFailure { err ->
+                _uiState.value = _uiState.value.copy(
+                    isLoadingReservations = false,
+                    snackbarMessage = err.message ?: "Failed to load reservations"
+                )
+            }
+        }
+    }
+
+    fun cancelReservation(reservationId: String, tableId: String) {
+        viewModelScope.launch {
+            val result = repository.cancelReservation(reservationId)
+            result.onSuccess {
+                _uiState.value = _uiState.value.copy(snackbarMessage = "Reservation cancelled successfully")
+                loadTableReservations(tableId)
+                loadTables(silent = true)
+            }.onFailure { err ->
+                _uiState.value = _uiState.value.copy(
+                    snackbarMessage = err.message ?: "Failed to cancel reservation"
+                )
+            }
+        }
     }
 
     fun startPickTarget(mode: String) {
@@ -255,16 +459,24 @@ class TablesViewModel(
     fun reserveTable(
         tableId: String,
         customerName: String,
+        reservedFrom: String? = null,
         reservedUntil: String,
         reservedNote: String? = null,
+        customerPhone: String? = null,
+        guestCount: Int? = 1,
+        reservationId: String? = null,
         updateExisting: Boolean = false
     ) {
         viewModelScope.launch {
             val result = repository.reserveTable(
                 tableId = tableId,
                 reservedBy = customerName,
+                reservedFrom = reservedFrom,
                 reservedUntil = reservedUntil,
                 reservedNote = reservedNote,
+                customerPhone = customerPhone,
+                guestCount = guestCount,
+                reservationId = reservationId,
                 updateExisting = updateExisting
             )
             result.onSuccess {

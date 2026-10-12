@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -60,6 +62,46 @@ fun SectionsScreen(
             SharedTabStrip(
                 selectedTab = MainTab.SECTIONS,
                 onTabSelected = onTabSelected
+            )
+
+            // Search Bar for Section / Subsection
+            OutlinedTextField(
+                value = uiState.searchQuery,
+                onValueChange = { viewModel.onSearchQueryChanged(it) },
+                placeholder = { Text("Search section or subsection...", fontSize = 14.sp) },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = PinkPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                trailingIcon = {
+                    if (uiState.searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.onSearchQueryChanged("") }, modifier = Modifier.size(28.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Clear",
+                                tint = Color.Gray,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(10.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    focusedBorderColor = PinkPrimary,
+                    unfocusedBorderColor = Color(0xFFE2E8F0)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .height(50.dp)
+                    .testTag("sections_search_bar")
             )
 
             Column(
@@ -117,7 +159,7 @@ fun SectionsScreen(
                             .fillMaxWidth(0.9f)
                             .background(Color.White)
                     ) {
-                        uiState.sections.forEach { sec ->
+                        uiState.filteredSections.forEach { sec ->
                             DropdownMenuItem(
                                 text = {
                                     Text(
@@ -144,7 +186,7 @@ fun SectionsScreen(
                     }
                 } else {
                     val currentSec = uiState.selectedSection
-                    val subList = uiState.subsections
+                    val subList = uiState.filteredSubsections
 
                     if (subList.isNotEmpty()) {
                         Text(

@@ -147,9 +147,26 @@ interface RestaurantApiService {
     suspend fun reserveTable(
         @Field("table_id") tableId: String,
         @Field("reserved_by") reservedBy: String,
+        @Field("reserved_from") reservedFrom: String? = null,
         @Field("reserved_until") reservedUntil: String? = null,
         @Field("reserved_note") reservedNote: String? = null,
+        @Field("customer_phone") customerPhone: String? = null,
+        @Field("guest_count") guestCount: Int? = 1,
+        @Field("reservation_id") reservationId: String? = null,
         @Field("update_existing") updateExisting: Int = 0
+    ): Response<ApiResponse<Map<String, Any?>>>
+
+    @FormUrlEncoded
+    @POST("table_reservations")
+    suspend fun getTableReservations(
+        @Field("table_id") tableId: String? = null,
+        @Field("date") date: String? = null
+    ): Response<ApiResponse<List<com.example.data.model.TableReservation>>>
+
+    @FormUrlEncoded
+    @POST("cancel_reservation")
+    suspend fun cancelReservation(
+        @Field("reservation_id") reservationId: String
     ): Response<ApiResponse<Map<String, Any?>>>
 
     @FormUrlEncoded

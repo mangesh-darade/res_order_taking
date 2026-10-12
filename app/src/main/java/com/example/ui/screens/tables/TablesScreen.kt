@@ -1,18 +1,33 @@
 package com.example.ui.screens.tables
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Notes
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,8 +37,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.model.TableItem
+import com.example.data.model.TableReservation
 import com.example.ui.components.MainTab
 import com.example.ui.components.SharedTabStrip
 import com.example.ui.components.TableCard
@@ -76,49 +93,289 @@ fun TablesScreen(
                 onTabSelected = onTabSelected
             )
 
-            val titleText = when {
-                sectionName.isNotBlank() && !subsectionName.isNullOrBlank() -> "$sectionName • $subsectionName"
-                sectionName.isNotBlank() -> sectionName
-                uiState.sectionName.isNotBlank() -> uiState.sectionName
-                else -> "All Tables"
-            }
-
+            // Search Bar & Filter Controls Container
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = Color.White,
                 shadowElevation = 1.dp
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
-                    Text(
-                        text = titleText.uppercase(),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextDark.copy(alpha = 0.6f),
-                        letterSpacing = 0.5.sp,
-                        modifier = Modifier.testTag("tables_section_title")
+                    // Search Bar
+                    OutlinedTextField(
+                        value = uiState.searchQuery,
+                        onValueChange = { viewModel.onSearchQueryChanged(it) },
+                        placeholder = { Text("Search table, status, reserved by...", fontSize = 13.sp) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = PinkPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            if (uiState.searchQuery.isNotEmpty()) {
+                                IconButton(
+                                    onClick = { viewModel.onSearchQueryChanged("") },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Clear",
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Color(0xFFF8FAFC),
+                            unfocusedContainerColor = Color(0xFFF8FAFC),
+                            focusedBorderColor = PinkPrimary,
+                            unfocusedBorderColor = Color(0xFFE2E8F0)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("tables_search_bar")
                     )
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Surface(
-                            modifier = Modifier.size(8.dp),
-                            shape = androidx.compose.foundation.shape.CircleShape,
-                            color = Color(0xFF22C55E)
-                        ) {}
-                        Text(
-                            text = "LIVE",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF16A34A)
+                    // Section & Subsection Dropdowns Row (only shown if more than 1 option exists)
+                    val showSectionDropdown = uiState.availableSections.size > 1
+                    val showSubsectionDropdown = uiState.availableSubsections.size > 1
+
+                    if (showSectionDropdown || showSubsectionDropdown) {
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Section Selector (only when multiple sections exist)
+                            if (showSectionDropdown) {
+                                var sectionMenuExpanded by remember { mutableStateOf(false) }
+                                Box(modifier = Modifier.weight(1f)) {
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(34.dp)
+                                            .clickable { sectionMenuExpanded = true },
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Color(0xFFF1F5F9),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(horizontal = 8.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = if (uiState.sectionName.isNotBlank()) uiState.sectionName else "All Sections",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = TextDark,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f, fill = false)
+                                            )
+                                            Icon(
+                                                imageVector = Icons.Default.ArrowDropDown,
+                                                contentDescription = null,
+                                                tint = TextDark,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = sectionMenuExpanded,
+                                        onDismissRequest = { sectionMenuExpanded = false }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("All Sections", fontWeight = FontWeight.Bold) },
+                                            onClick = {
+                                                sectionMenuExpanded = false
+                                                viewModel.selectSectionFilter(null)
+                                            }
+                                        )
+                                        uiState.availableSections.forEach { sec ->
+                                            DropdownMenuItem(
+                                                text = { Text(sec.name) },
+                                                onClick = {
+                                                    sectionMenuExpanded = false
+                                                    viewModel.selectSectionFilter(sec)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Subsection Selector (only when multiple subsections exist for this section)
+                            if (showSubsectionDropdown) {
+                                var subsectionMenuExpanded by remember { mutableStateOf(false) }
+                                Box(modifier = Modifier.weight(1f)) {
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(34.dp)
+                                            .clickable { subsectionMenuExpanded = true },
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Color(0xFFF1F5F9),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(horizontal = 8.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = if (!uiState.subsectionName.isNullOrBlank()) uiState.subsectionName!! else "All Subsections",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = TextDark,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f, fill = false)
+                                            )
+                                            Icon(
+                                                imageVector = Icons.Default.ArrowDropDown,
+                                                contentDescription = null,
+                                                tint = TextDark,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = subsectionMenuExpanded,
+                                        onDismissRequest = { subsectionMenuExpanded = false }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("All Subsections", fontWeight = FontWeight.Bold) },
+                                            onClick = {
+                                                subsectionMenuExpanded = false
+                                                viewModel.selectSubsectionFilter(null)
+                                            }
+                                        )
+                                        uiState.availableSubsections.forEach { sub ->
+                                            DropdownMenuItem(
+                                                text = { Text(sub.name) },
+                                                onClick = {
+                                                    subsectionMenuExpanded = false
+                                                    viewModel.selectSubsectionFilter(sub)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Status Filter Chips Row (Matching TableCard Status Colors)
+                    val allCount = uiState.allTables.size
+                    val availCount = uiState.allTables.count { it.status.lowercase() == "available" }
+                    val occCount = uiState.allTables.count { it.status.lowercase() in listOf("occupied", "order-placed", "placed", "kitchen", "kot_sent", "ready", "served") }
+                    val resCount = uiState.allTables.count { it.status.lowercase() == "reserved" }
+                    val freeCount = uiState.allTables.count { it.status.lowercase() in listOf("free", "billed") }
+
+                    data class StatusFilterOption(
+                        val key: String,
+                        val label: String,
+                        val bgColor: Color,
+                        val textColor: Color,
+                        val borderColor: Color,
+                        val selectedBorderColor: Color
+                    )
+
+                    val filterOptions = listOf(
+                        StatusFilterOption(
+                            key = "ALL",
+                            label = "All ($allCount)",
+                            bgColor = Color(0xFFF1F5F9),
+                            textColor = Color(0xFF334155),
+                            borderColor = Color(0xFFCBD5E1),
+                            selectedBorderColor = Color(0xFF475569)
+                        ),
+                        StatusFilterOption(
+                            key = "AVAILABLE",
+                            label = "Available ($availCount)",
+                            bgColor = Color(0xFFFFFFFF),
+                            textColor = PinkPrimary,
+                            borderColor = PinkPrimary.copy(alpha = 0.45f),
+                            selectedBorderColor = PinkPrimary
+                        ),
+                        StatusFilterOption(
+                            key = "OCCUPIED",
+                            label = "Occupied ($occCount)",
+                            bgColor = Color(0xFFA2E5FF),
+                            textColor = Color(0xFF0284C7),
+                            borderColor = Color(0xFF7DD3FC),
+                            selectedBorderColor = Color(0xFF0284C7)
+                        ),
+                        StatusFilterOption(
+                            key = "RESERVED",
+                            label = "Reserved ($resCount)",
+                            bgColor = Color(0xFFFFFF99),
+                            textColor = Color(0xFF856404),
+                            borderColor = Color(0xFFFDE047),
+                            selectedBorderColor = Color(0xFFB45309)
+                        ),
+                        StatusFilterOption(
+                            key = "FREE",
+                            label = "Billed ($freeCount)",
+                            bgColor = Color(0xFFFFCDD2),
+                            textColor = Color(0xFFB71C1C),
+                            borderColor = Color(0xFFFCA5A5),
+                            selectedBorderColor = Color(0xFFB71C1C)
                         )
+                    )
+
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(filterOptions) { opt ->
+                            val isSelected = uiState.statusFilter == opt.key
+                            Surface(
+                                modifier = Modifier
+                                    .height(28.dp)
+                                    .clickable { viewModel.onStatusFilterChanged(opt.key) },
+                                shape = RoundedCornerShape(14.dp),
+                                color = opt.bgColor,
+                                shadowElevation = if (isSelected) 2.dp else 0.dp,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    width = if (isSelected) 2.dp else 1.dp,
+                                    color = if (isSelected) opt.selectedBorderColor else opt.borderColor
+                                )
+                            ) {
+                                Box(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = opt.label,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                        color = opt.textColor
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -242,16 +499,18 @@ fun TablesScreen(
                                 tint = Color.Gray.copy(alpha = 0.4f),
                                 modifier = Modifier.size(64.dp)
                             )
-                            Spacer(modifier = Modifier.height(12.dp))
+                            val isFilterActive = uiState.searchQuery.isNotBlank() || uiState.statusFilter != "ALL"
                             Text(
-                                text = if (uiState.hasAssignedTables && uiState.isFilterByAssigned) "No Assigned Tables Here" else "No Tables Found",
+                                text = if (isFilterActive) "No Matching Tables" else if (uiState.hasAssignedTables && uiState.isFilterByAssigned) "No Assigned Tables Here" else "No Tables Found",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextDark
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = if (uiState.hasAssignedTables && uiState.isFilterByAssigned) {
+                                text = if (isFilterActive) {
+                                    "No tables match the current search or status filter."
+                                } else if (uiState.hasAssignedTables && uiState.isFilterByAssigned) {
                                     "You have no assigned tables in this section.\nTap below to view all tables."
                                 } else {
                                     "No tables found in this section.\nPlease configure sections and tables in ElintOm POS."
@@ -261,7 +520,15 @@ fun TablesScreen(
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            if (uiState.hasAssignedTables && uiState.isFilterByAssigned) {
+                            if (isFilterActive) {
+                                Button(
+                                    onClick = { viewModel.resetAllFilters() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("Reset Filters")
+                                }
+                            } else if (uiState.hasAssignedTables && uiState.isFilterByAssigned) {
                                 Button(
                                     onClick = { viewModel.toggleAssignedFilter() },
                                     colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary),
@@ -311,101 +578,10 @@ fun TablesScreen(
                                         }
                                     }
                                 },
-                                onFreeClick = { viewModel.showFreeConfirmDialog(table) }
+                                onFreeClick = { viewModel.showFreeConfirmDialog(table) },
+                                onViewReservations = { viewModel.showReservationsDialog(table) }
                             )
                         }
-                    }
-                }
-            }
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = Color.White,
-                shadowElevation = 4.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val statuses = uiState.tables.map { it.status.lowercase() }
-                    val totalCount = uiState.tables.size
-                    val availableCount = statuses.count { it == "available" }
-                    val occupiedCount = statuses.count { it == "occupied" }
-                    val placedCount = statuses.count {
-                        it in listOf("order-placed", "placed", "kitchen", "kot_sent")
-                    }
-                    val readyCount = statuses.count { it == "ready" || it == "order-ready" }
-                    val servedCount = statuses.count { it == "served" }
-                    val reservedCount = statuses.count { it == "reserved" }
-                    val freeCount = statuses.count { it == "free" }
-
-                    // Dynamic colors from DB/API tables with fallback
-                    val occupiedColor = uiState.tables.firstOrNull { it.status.lowercase() == "occupied" }?.statusColor?.let { parseLegendHex(it, Color(0xFFA2E5FF)) } ?: Color(0xFFA2E5FF)
-                    val placedColor = uiState.tables.firstOrNull { it.status.lowercase() in listOf("order-placed", "placed", "kitchen", "kot_sent") }?.statusColor?.let { parseLegendHex(it, Color(0xFFFF7EB6)) } ?: Color(0xFFFF7EB6)
-                    val readyColor = uiState.tables.firstOrNull { it.status.lowercase() in listOf("ready", "order-ready") }?.statusColor?.let { parseLegendHex(it, Color(0xFFC8E6C9)) } ?: Color(0xFFC8E6C9)
-                    val servedColor = uiState.tables.firstOrNull { it.status.lowercase() == "served" }?.statusColor?.let { parseLegendHex(it, Color(0xFFE9D5FF)) } ?: Color(0xFFE9D5FF)
-                    val reservedColor = uiState.tables.firstOrNull { it.status.lowercase() == "reserved" }?.statusColor?.let { parseLegendHex(it, Color(0xFFFFFF99)) } ?: Color(0xFFFFFF99)
-                    val freeColor = uiState.tables.firstOrNull { it.status.lowercase() == "free" }?.statusColor?.let { parseLegendHex(it, Color(0xFFFFCDD2)) } ?: Color(0xFFFFCDD2)
-
-                    Row(
-                        modifier = Modifier.weight(1f, fill = false),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Colors match TableCard & Web Floor View: white / blue / pink / green / purple / yellow / red
-                        StatusLegendChip(
-                            color = Color.White,
-                            count = availableCount,
-                            total = totalCount,
-                            bordered = true
-                        )
-                        StatusLegendChip(
-                            color = occupiedColor,
-                            count = occupiedCount,
-                            total = totalCount
-                        )
-                        StatusLegendChip(
-                            color = placedColor,
-                            count = placedCount,
-                            total = totalCount
-                        )
-                        StatusLegendChip(
-                            color = readyColor,
-                            count = readyCount,
-                            total = totalCount
-                        )
-                        StatusLegendChip(
-                            color = servedColor,
-                            count = servedCount,
-                            total = totalCount
-                        )
-                        StatusLegendChip(
-                            color = reservedColor,
-                            count = reservedCount,
-                            total = totalCount
-                        )
-                        StatusLegendChip(
-                            color = freeColor,
-                            count = freeCount,
-                            total = totalCount
-                        )
-                    }
-
-                    Button(
-                        onClick = { viewModel.loadTables() },
-                        colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Text(
-                            text = "REFRESH",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
                     }
                 }
             }
@@ -502,16 +678,36 @@ fun TablesScreen(
 
     // Pick mode uses top banner only — no blocking dialog (tables must stay tappable)
 
+    if (uiState.reservationsDialogTable != null) {
+        TableReservationsDialog(
+            table = uiState.reservationsDialogTable!!,
+            reservations = uiState.tableReservations,
+            isLoading = uiState.isLoadingReservations,
+            onDismiss = { viewModel.dismissReservationsDialog() },
+            onBookNewSlot = {
+                val table = uiState.reservationsDialogTable!!
+                viewModel.showReserveDialog(table)
+            },
+            onCancelReservation = { resId ->
+                val tableId = uiState.reservationsDialogTable!!.id
+                viewModel.cancelReservation(resId, tableId)
+            }
+        )
+    }
+
     if (uiState.reserveDialogTable != null) {
         ReserveTableDialog(
             table = uiState.reserveDialogTable!!,
             onDismiss = { viewModel.dismissConfirmDialog() },
-            onReserve = { by, until, note, isEdit ->
+            onReserve = { by, from, until, note, phone, guests, isEdit ->
                 viewModel.reserveTable(
                     tableId = uiState.reserveDialogTable!!.id,
                     customerName = by,
+                    reservedFrom = from,
                     reservedUntil = until,
                     reservedNote = note,
+                    customerPhone = phone,
+                    guestCount = guests,
                     updateExisting = isEdit
                 )
             },
@@ -530,15 +726,23 @@ fun TablesScreen(
 private fun ReserveTableDialog(
     table: TableItem,
     onDismiss: () -> Unit,
-    onReserve: (reservedBy: String, reservedUntil: String, reservedNote: String?, isEdit: Boolean) -> Unit,
+    onReserve: (reservedBy: String, reservedFrom: String, reservedUntil: String, reservedNote: String?, phone: String?, guests: Int, isEdit: Boolean) -> Unit,
     onUnreserve: () -> Unit,
     onStartOrder: () -> Unit
 ) {
     val isReserved = table.status.lowercase() == "reserved"
     var editMode by remember(table.id) { mutableStateOf(!isReserved) }
+    var isBookingNewSlot by remember(table.id) { mutableStateOf(false) }
 
     var reservedBy by remember(table.id) {
         mutableStateOf(if (isReserved) table.reservedBy.orEmpty() else "")
+    }
+    var customerPhone by remember(table.id) { mutableStateOf("") }
+    var guestCountStr by remember(table.id) {
+        mutableStateOf((table.guestsCount?.takeIf { it > 0 } ?: 2).toString())
+    }
+    var reservedFromMillis by remember(table.id) {
+        mutableStateOf(System.currentTimeMillis())
     }
     var reservedUntilMillis by remember(table.id) {
         mutableStateOf(parseReservedUntilMillis(table.reservedUntil) ?: defaultReservedUntilMillis())
@@ -549,17 +753,21 @@ private fun ReserveTableDialog(
     var formError by remember(table.id) { mutableStateOf<String?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
+    var pickingForFrom by remember { mutableStateOf(false) }
 
+    val fromDisplay = formatMillisForField(reservedFromMillis)
     val untilDisplay = formatMillisForField(reservedUntilMillis)
+
+    val activeMillis = if (pickingForFrom) reservedFromMillis else reservedUntilMillis
     val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = startOfDayUtcMillis(reservedUntilMillis),
+        initialSelectedDateMillis = startOfDayUtcMillis(activeMillis),
         yearRange = IntRange(
             Calendar.getInstance().get(Calendar.YEAR),
             Calendar.getInstance().get(Calendar.YEAR) + 2
         )
     )
-    val initialCal = remember(reservedUntilMillis) {
-        Calendar.getInstance().apply { timeInMillis = reservedUntilMillis }
+    val initialCal = remember(activeMillis) {
+        Calendar.getInstance().apply { timeInMillis = activeMillis }
     }
     val timePickerState = rememberTimePickerState(
         initialHour = initialCal.get(Calendar.HOUR_OF_DAY),
@@ -567,72 +775,520 @@ private fun ReserveTableDialog(
         is24Hour = true
     )
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = when {
-                    editMode && isReserved -> "Edit Reservation ${table.tableNumber}"
-                    isReserved && !editMode -> "Reserved Table ${table.tableNumber}"
-                    else -> "Reserve Table ${table.tableNumber}"
-                },
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = Color.White,
+            shadowElevation = 8.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .padding(20.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                if (isReserved && !editMode) {
-                    Text(
-                        text = "Table ${table.tableNumber} is currently reserved.",
-                        fontSize = 14.sp
-                    )
-                    DetailRow("Reserved By", table.reservedBy ?: "—")
-                    DetailRow("Until", formatReservedUntilDisplay(table.reservedUntil) ?: "—")
-                    if (!table.reservedNote.isNullOrBlank()) {
-                        DetailRow("Note", table.reservedNote)
+                // Header Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Table ${table.tableNumber}",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0F172A)
+                        )
+                        if (isReserved) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color(0xFFFEF3C7)
+                            ) {
+                                Text(
+                                    text = if (isBookingNewSlot) "ADVANCE" else "RESERVED",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFFB45309),
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                     }
-                    Text(
-                        text = "Start order, edit details, or cancel reservation.",
-                        fontSize = 13.sp,
-                        color = TextDark.copy(alpha = 0.7f)
-                    )
+
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                if (isReserved && !editMode) {
+                    // Active Reservation Detail Card
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFFF8FAFC),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Surface(
+                                        shape = androidx.compose.foundation.shape.CircleShape,
+                                        color = PinkPrimary.copy(alpha = 0.12f),
+                                        modifier = Modifier.size(34.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = Icons.Default.Person,
+                                                contentDescription = null,
+                                                tint = PinkPrimary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Customer Name",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = Color(0xFF64748B)
+                                        )
+                                        Text(
+                                            text = table.reservedBy?.ifBlank { "Guest" } ?: "Guest",
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF0F172A)
+                                        )
+                                    }
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color.White,
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Person,
+                                            contentDescription = null,
+                                            tint = Color(0xFF64748B),
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Text(
+                                            text = "${table.guestsCount?.takeIf { it > 0 } ?: 1} Guests",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF334155)
+                                        )
+                                    }
+                                }
+                            }
+
+                            HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 0.8.dp)
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Surface(
+                                    shape = androidx.compose.foundation.shape.CircleShape,
+                                    color = Color(0xFFFEF3C7),
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.Schedule,
+                                            contentDescription = null,
+                                            tint = Color(0xFFD97706),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                                Column {
+                                    Text(
+                                        text = "Reserved Until",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF64748B)
+                                    )
+                                    Text(
+                                        text = formatReservedUntilDisplay(table.reservedUntil) ?: "—",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF0F172A)
+                                    )
+                                }
+                            }
+
+                            if (!table.reservedNote.isNullOrBlank()) {
+                                HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 0.8.dp)
+                                Row(
+                                    verticalAlignment = Alignment.Top,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Notes,
+                                        contentDescription = null,
+                                        tint = Color(0xFF64748B),
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(
+                                        text = table.reservedNote,
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF475569)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Action Buttons in View Mode
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = onStartOrder,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Restaurant,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Start Order / Seat Guest",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        FilledTonalButton(
+                            onClick = {
+                                isBookingNewSlot = true
+                                editMode = true
+                                reservedBy = ""
+                                customerPhone = ""
+                                guestCountStr = (table.guestsCount?.takeIf { it > 0 } ?: 2).toString()
+                                val nextStart = parseReservedUntilMillis(table.reservedUntil) ?: System.currentTimeMillis()
+                                reservedFromMillis = nextStart
+                                reservedUntilMillis = nextStart + TimeUnit.HOURS.toMillis(2)
+                                reservedNote = ""
+                                formError = null
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(44.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = Color(0xFFDCFCE7),
+                                contentColor = Color(0xFF15803D)
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Book Next Slot (Advance Booking)",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    editMode = true
+                                    isBookingNewSlot = false
+                                    reservedBy = table.reservedBy.orEmpty()
+                                    reservedUntilMillis = parseReservedUntilMillis(table.reservedUntil) ?: defaultReservedUntilMillis()
+                                    reservedNote = table.reservedNote.orEmpty()
+                                    formError = null
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(42.dp),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Edit",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+
+                            OutlinedButton(
+                                onClick = onUnreserve,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(42.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFDC2626)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFCA5A5))
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Cancel Booking",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
                 } else {
+                    // Form Mode
+                    if (isReserved) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFF1F5F9),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(3.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        isBookingNewSlot = false
+                                        reservedBy = table.reservedBy.orEmpty()
+                                        reservedUntilMillis = parseReservedUntilMillis(table.reservedUntil) ?: defaultReservedUntilMillis()
+                                        reservedNote = table.reservedNote.orEmpty()
+                                        formError = null
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (!isBookingNewSlot) Color.White else Color.Transparent,
+                                        contentColor = if (!isBookingNewSlot) Color(0xFF0F172A) else Color(0xFF64748B)
+                                    ),
+                                    elevation = ButtonDefaults.buttonElevation(defaultElevation = if (!isBookingNewSlot) 1.dp else 0.dp),
+                                    shape = RoundedCornerShape(6.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(34.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                ) {
+                                    Text("Edit Current", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                Button(
+                                    onClick = {
+                                        isBookingNewSlot = true
+                                        reservedBy = ""
+                                        customerPhone = ""
+                                        guestCountStr = (table.guestsCount?.takeIf { it > 0 } ?: 2).toString()
+                                        val nextStart = parseReservedUntilMillis(table.reservedUntil) ?: System.currentTimeMillis()
+                                        reservedFromMillis = nextStart
+                                        reservedUntilMillis = nextStart + TimeUnit.HOURS.toMillis(2)
+                                        reservedNote = ""
+                                        formError = null
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isBookingNewSlot) Color(0xFF16A34A) else Color.Transparent,
+                                        contentColor = if (isBookingNewSlot) Color.White else Color(0xFF64748B)
+                                    ),
+                                    elevation = ButtonDefaults.buttonElevation(defaultElevation = if (isBookingNewSlot) 1.dp else 0.dp),
+                                    shape = RoundedCornerShape(6.dp),
+                                    modifier = Modifier
+                                        .weight(1.2f)
+                                        .height(34.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                ) {
+                                    Text("+ Next Customer", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
                     OutlinedTextField(
                         value = reservedBy,
                         onValueChange = {
                             reservedBy = it
                             formError = null
                         },
-                        label = { Text("Reserved By *") },
+                        label = { Text(if (isBookingNewSlot) "Next Customer Name *" else "Customer Name *") },
+                        placeholder = { Text(if (isBookingNewSlot) "e.g. Ramesh Patil" else "e.g. Customer Name") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = Color(0xFF64748B),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
                         singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("reserve_by_field")
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = customerPhone,
+                            onValueChange = { customerPhone = it },
+                            label = { Text("Phone") },
+                            placeholder = { Text("Mobile No.") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Phone,
+                                    contentDescription = null,
+                                    tint = Color(0xFF64748B),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1.1f)
+                        )
+                        OutlinedTextField(
+                            value = guestCountStr,
+                            onValueChange = { if (it.all { ch -> ch.isDigit() }) guestCountStr = it },
+                            label = { Text("Guests") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = Color(0xFF64748B),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(0.9f)
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = fromDisplay,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("From (Date & Time) *") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Schedule,
+                                contentDescription = null,
+                                tint = Color(0xFF64748B),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = {
+                                    pickingForFrom = true
+                                    showDatePicker = true
+                                }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Default.CalendarMonth, contentDescription = "Date", modifier = Modifier.size(18.dp))
+                                }
+                                IconButton(onClick = {
+                                    pickingForFrom = true
+                                    showTimePicker = true
+                                }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Default.Schedule, contentDescription = "Time", modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                pickingForFrom = true
+                                showDatePicker = true
+                            }
                     )
 
                     OutlinedTextField(
                         value = untilDisplay,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Until *") },
+                        label = { Text("Until (Date & Time) *") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Schedule,
+                                contentDescription = null,
+                                tint = Color(0xFF64748B),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
                         trailingIcon = {
-                            Row {
-                                IconButton(onClick = { showDatePicker = true }) {
-                                    Icon(Icons.Default.CalendarMonth, contentDescription = "Pick date")
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = {
+                                    pickingForFrom = false
+                                    showDatePicker = true
+                                }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Default.CalendarMonth, contentDescription = "Date", modifier = Modifier.size(18.dp))
                                 }
-                                IconButton(onClick = { showTimePicker = true }) {
-                                    Icon(Icons.Default.Schedule, contentDescription = "Pick time")
+                                IconButton(onClick = {
+                                    pickingForFrom = false
+                                    showTimePicker = true
+                                }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Default.Schedule, contentDescription = "Time", modifier = Modifier.size(18.dp))
                                 }
                             }
                         },
+                        shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { showDatePicker = true }
+                            .clickable {
+                                pickingForFrom = false
+                                showDatePicker = true
+                            }
                             .testTag("reserve_until_field")
                     )
 
@@ -640,85 +1296,110 @@ private fun ReserveTableDialog(
                         value = reservedNote,
                         onValueChange = { reservedNote = it },
                         label = { Text("Note (optional)") },
+                        placeholder = { Text("e.g. Birthday celebration, window seat") },
+                        shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2
                     )
+
                     if (formError != null) {
-                        Text(
-                            text = formError!!,
-                            color = Color(0xFFB71C1C),
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            if (isReserved && !editMode) {
-                Button(
-                    onClick = onStartOrder,
-                    colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary)
-                ) {
-                    Text("Start Order")
-                }
-            } else {
-                Button(
-                    onClick = {
-                        val by = reservedBy.trim()
-                        val normalizedUntil = formatMillisForApi(reservedUntilMillis)
-                        when {
-                            by.isEmpty() -> formError = "Reserved By is required"
-                            reservedUntilMillis <= System.currentTimeMillis() ->
-                                formError = "Reserved Until must be in the future"
-                            else -> {
-                                formError = null
-                                onReserve(
-                                    by,
-                                    normalizedUntil,
-                                    reservedNote.trim().ifEmpty { null },
-                                    isReserved && editMode
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFFEE2E2),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = null,
+                                    tint = Color(0xFFDC2626),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = formError!!,
+                                    color = Color(0xFFDC2626),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
                                 )
                             }
                         }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
-                    modifier = Modifier.testTag("reserve_submit_button")
-                ) {
-                    Text(if (isReserved && editMode) "Save Changes" else "Reserve")
-                }
-            }
-        },
-        dismissButton = {
-            if (isReserved && !editMode) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = {
-                        editMode = true
-                        reservedBy = table.reservedBy.orEmpty()
-                        reservedUntilMillis =
-                            parseReservedUntilMillis(table.reservedUntil) ?: defaultReservedUntilMillis()
-                        reservedNote = table.reservedNote.orEmpty()
-                        formError = null
-                    }) {
-                        Text("Edit")
                     }
-                    OutlinedButton(onClick = onUnreserve) {
-                        Text("Cancel Reservation")
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val by = reservedBy.trim()
+                                val normalizedFrom = formatMillisForApi(reservedFromMillis)
+                                val normalizedUntil = formatMillisForApi(reservedUntilMillis)
+                                val guests = guestCountStr.toIntOrNull() ?: 1
+                                val isEditAction = isReserved && editMode && !isBookingNewSlot
+                                when {
+                                    by.isEmpty() -> formError = "Customer Name is required"
+                                    reservedUntilMillis <= reservedFromMillis ->
+                                        formError = "Reserved Until must be after From time"
+                                    else -> {
+                                        formError = null
+                                        onReserve(
+                                            by,
+                                            normalizedFrom,
+                                            normalizedUntil,
+                                            reservedNote.trim().ifEmpty { null },
+                                            customerPhone.trim().ifEmpty { null },
+                                            guests,
+                                            isEditAction
+                                        )
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isBookingNewSlot) Color(0xFF16A34A) else Color(0xFFD97706)
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .testTag("reserve_submit_button")
+                        ) {
+                            Text(
+                                text = when {
+                                    isBookingNewSlot -> "Confirm Advance Booking"
+                                    isReserved && editMode -> "Save Changes"
+                                    else -> "Reserve Table"
+                                },
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                if (isReserved) {
+                                    editMode = false
+                                    isBookingNewSlot = false
+                                    formError = null
+                                } else {
+                                    onDismiss()
+                                }
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                        ) {
+                            Text(if (isReserved) "Back" else "Cancel", fontSize = 13.sp)
+                        }
                     }
-                }
-            } else if (isReserved && editMode) {
-                OutlinedButton(onClick = {
-                    editMode = false
-                    formError = null
-                }) {
-                    Text("Back")
-                }
-            } else {
-                OutlinedButton(onClick = onDismiss) {
-                    Text("Dismiss")
                 }
             }
         }
-    )
+    }
 
     if (showDatePicker) {
         DatePickerDialog(
@@ -727,7 +1408,11 @@ private fun ReserveTableDialog(
                 TextButton(onClick = {
                     val selected = datePickerState.selectedDateMillis
                     if (selected != null) {
-                        reservedUntilMillis = mergeDateKeepingTime(selected, reservedUntilMillis)
+                        if (pickingForFrom) {
+                            reservedFromMillis = mergeDateKeepingTime(selected, reservedFromMillis)
+                        } else {
+                            reservedUntilMillis = mergeDateKeepingTime(selected, reservedUntilMillis)
+                        }
                         formError = null
                     }
                     showDatePicker = false
@@ -744,7 +1429,7 @@ private fun ReserveTableDialog(
     if (showTimePicker) {
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
-            title = { Text("Select time") },
+            title = { Text(if (pickingForFrom) "Select start time" else "Select end time") },
             text = {
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     TimePicker(state = timePickerState)
@@ -752,11 +1437,19 @@ private fun ReserveTableDialog(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    reservedUntilMillis = mergeTimeKeepingDate(
-                        reservedUntilMillis,
-                        timePickerState.hour,
-                        timePickerState.minute
-                    )
+                    if (pickingForFrom) {
+                        reservedFromMillis = mergeTimeKeepingDate(
+                            reservedFromMillis,
+                            timePickerState.hour,
+                            timePickerState.minute
+                        )
+                    } else {
+                        reservedUntilMillis = mergeTimeKeepingDate(
+                            reservedUntilMillis,
+                            timePickerState.hour,
+                            timePickerState.minute
+                        )
+                    }
                     formError = null
                     showTimePicker = false
                 }) { Text("OK") }
@@ -765,66 +1458,6 @@ private fun ReserveTableDialog(
                 TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
             }
         )
-    }
-}
-
-@Composable
-private fun DetailRow(label: String, value: String) {
-    Column {
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = TextDark.copy(alpha = 0.55f)
-        )
-        Text(
-            text = value,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            color = TextDark
-        )
-    }
-}
-
-/**
- * Footer status color chip — colors align with TableCard backgrounds.
- */
-@Composable
-private fun StatusLegendChip(
-    color: Color,
-    count: Int,
-    total: Int,
-    bordered: Boolean = false
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Surface(
-            modifier = Modifier
-                .size(12.dp)
-                .then(
-                    if (bordered) Modifier.border(1.dp, Color.LightGray, RoundedCornerShape(3.dp))
-                    else Modifier
-                ),
-            shape = RoundedCornerShape(3.dp),
-            color = color
-        ) {}
-        Text(
-            text = "$count/$total",
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            color = TextDark
-        )
-    }
-}
-
-private fun parseLegendHex(hex: String?, fallback: Color): Color {
-    if (hex.isNullOrBlank()) return fallback
-    return try {
-        Color(android.graphics.Color.parseColor(hex.trim()))
-    } catch (_: Exception) {
-        fallback
     }
 }
 
@@ -905,3 +1538,295 @@ private fun formatReservedUntilDisplay(raw: String?): String? {
         raw
     }
 }
+
+@Composable
+private fun TableReservationsDialog(
+    table: TableItem,
+    reservations: List<TableReservation>,
+    isLoading: Boolean,
+    onDismiss: () -> Unit,
+    onBookNewSlot: () -> Unit,
+    onCancelReservation: (reservationId: String) -> Unit
+) {
+    var reservationToCancel by remember { mutableStateOf<TableReservation?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Visibility,
+                        contentDescription = null,
+                        tint = PinkPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Table ${table.tableNumber} Bookings",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                }
+                IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = TextMuted)
+                }
+            }
+        },
+        text = {
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = PinkPrimary)
+                }
+            } else if (reservations.isEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Event,
+                        contentDescription = null,
+                        tint = TextMuted,
+                        modifier = Modifier.size(44.dp)
+                    )
+                    Text(
+                        text = "No upcoming reservations",
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextDark,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = "This table has no active or future reservations.",
+                        color = TextMuted,
+                        fontSize = 12.sp
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 380.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(reservations) { res ->
+                        val isSeated = res.status == 2
+                        val statusBg = if (isSeated) Color(0xFFDCFCE7) else Color(0xFFFEF3C7)
+                        val statusText = if (isSeated) Color(0xFF16A34A) else Color(0xFFD97706)
+                        val statusLabel = if (isSeated) "SEATED" else "CONFIRMED"
+
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFF8FAFC),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = statusBg
+                                    ) {
+                                        Text(
+                                            text = statusLabel,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = statusText,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    if (!isSeated) {
+                                        TextButton(
+                                            onClick = { reservationToCancel = res },
+                                            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFDC2626)),
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                            modifier = Modifier.height(26.dp)
+                                        ) {
+                                            Text("Cancel", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Schedule,
+                                        contentDescription = null,
+                                        tint = TextMuted,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = formatReservationSlot(res.reservedFrom, res.reservedTo),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextDark
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Person,
+                                            contentDescription = null,
+                                            tint = TextMuted,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(
+                                            text = res.customerName.ifBlank { "Guest" },
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = TextDark
+                                        )
+                                    }
+                                    Text(
+                                        text = "${res.guestCount ?: 1} Guests",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = TextMuted
+                                    )
+                                }
+
+                                if (!res.customerPhone.isNullOrBlank()) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Phone,
+                                            contentDescription = null,
+                                            tint = TextMuted,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(
+                                            text = res.customerPhone,
+                                            fontSize = 11.sp,
+                                            color = TextMuted
+                                        )
+                                    }
+                                }
+
+                                if (!res.notes.isNullOrBlank()) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Notes,
+                                            contentDescription = null,
+                                            tint = TextMuted,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(
+                                            text = res.notes,
+                                            fontSize = 11.sp,
+                                            color = TextMuted
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onBookNewSlot,
+                colors = ButtonDefaults.buttonColors(containerColor = PinkPrimary)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("+ Book Slot")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+
+    if (reservationToCancel != null) {
+        val target = reservationToCancel!!
+        AlertDialog(
+            onDismissRequest = { reservationToCancel = null },
+            title = { Text("Cancel Reservation?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "Are you sure you want to cancel the reservation for ${target.customerName} on ${formatReservationSlot(target.reservedFrom, target.reservedTo)}?"
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val id = target.id
+                        reservationToCancel = null
+                        onCancelReservation(id)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                ) {
+                    Text("Yes, Cancel")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { reservationToCancel = null }) {
+                    Text("No, Keep")
+                }
+            }
+        )
+    }
+}
+
+private fun formatReservationSlot(fromRaw: String, toRaw: String): String {
+    return try {
+        val parser = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+        val outDateFmt = java.text.SimpleDateFormat("d MMM, hh:mm a", Locale.US)
+        val outTimeFmt = java.text.SimpleDateFormat("hh:mm a", Locale.US)
+
+        val fClean = fromRaw.trim().replace('T', ' ').let { if (it.length == 16) "$it:00" else it }
+        val tClean = toRaw.trim().replace('T', ' ').let { if (it.length == 16) "$it:00" else it }
+
+        val fDate = parser.parse(fClean)
+        val tDate = parser.parse(tClean)
+
+        if (fDate != null && tDate != null) {
+            "${outDateFmt.format(fDate)} - ${outTimeFmt.format(tDate)}"
+        } else {
+            "$fromRaw - $toRaw"
+        }
+    } catch (_: Exception) {
+        "$fromRaw - $toRaw"
+    }
+}
+

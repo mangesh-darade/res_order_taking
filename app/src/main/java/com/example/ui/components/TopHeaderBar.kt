@@ -185,24 +185,60 @@ fun TopHeaderBar(
                 }
             }
 
-            // Right: Hamburger / Dropdown Menu
-            Box {
-                IconButton(
-                    onClick = {
-                        if (onMenuClick != null) {
-                            onMenuClick()
-                        } else {
-                            menuExpanded = true
-                        }
-                    },
-                    modifier = Modifier.testTag("hamburger_menu_button")
+            // Right: Live / Offline Indicator & Hamburger / Dropdown Menu
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Live / Offline Status Chip
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isOnline) Color(0xFF16A34A).copy(alpha = 0.25f) else Color.Black.copy(alpha = 0.35f),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isOnline) Color(0xFF4ADE80).copy(alpha = 0.6f) else Color(0xFFEF4444).copy(alpha = 0.6f)
+                    ),
+                    modifier = Modifier
+                        .clickable { showSyncDialog = true }
+                        .testTag("network_status_badge")
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Menu,
-                        contentDescription = "Menu",
-                        tint = Color.White
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = if (isOnline) Color(0xFF22C55E) else Color(0xFFEF4444),
+                            modifier = Modifier.size(7.dp)
+                        ) {}
+                        Text(
+                            text = if (isOnline) "LIVE" else "OFFLINE",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
                 }
+
+                Box {
+                    IconButton(
+                        onClick = {
+                            if (onMenuClick != null) {
+                                onMenuClick()
+                            } else {
+                                menuExpanded = true
+                            }
+                        },
+                        modifier = Modifier.testTag("hamburger_menu_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Menu,
+                            contentDescription = "Menu",
+                            tint = Color.White
+                        )
+                    }
 
                 DropdownMenu(
                     expanded = menuExpanded,
@@ -293,6 +329,7 @@ fun TopHeaderBar(
             }
         }
     }
+}
 
     if (showSyncDialog) {
         SyncStatusDialog(onDismissRequest = { showSyncDialog = false })

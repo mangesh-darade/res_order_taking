@@ -611,14 +611,22 @@ class SyncManager private constructor(context: Context) {
                 "RESERVE_TABLE" -> {
                     val tableId = payload["tableId"] as? String ?: return SyncItemResult.Drop("Missing tableId")
                     val reservedBy = payload["reservedBy"] as? String ?: return SyncItemResult.Drop("Missing reservedBy")
+                    val reservedFrom = payload["reservedFrom"] as? String
                     val reservedUntil = payload["reservedUntil"] as? String ?: return SyncItemResult.Drop("Missing reservedUntil")
                     val reservedNote = payload["reservedNote"] as? String
+                    val customerPhone = payload["customerPhone"] as? String
+                    val guestCount = payloadInt(payload["guestCount"], 1)
+                    val reservationId = payload["reservationId"] as? String
                     val updateExisting = payloadInt(payload["updateExisting"], 0)
                     val res = api.reserveTable(
                         tableId = tableId,
                         reservedBy = reservedBy,
+                        reservedFrom = reservedFrom,
                         reservedUntil = reservedUntil,
                         reservedNote = reservedNote,
+                        customerPhone = customerPhone,
+                        guestCount = guestCount,
+                        reservationId = reservationId,
                         updateExisting = updateExisting
                     )
                     if (res.isSuccessful && res.body()?.response?.status == "SUCCESS") {

@@ -3,6 +3,7 @@ package com.example.ui.components
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -12,6 +13,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -34,6 +36,7 @@ fun TableCard(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     onFreeClick: (() -> Unit)? = null,
+    onViewReservations: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val statusLower = table.status.lowercase()
@@ -137,34 +140,51 @@ fun TableCard(
                     )
                 }
 
-                if (statusIcon != null || showGuest) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        modifier = Modifier.padding(end = 2.dp)
-                    ) {
-                        if (statusIcon != null) {
-                            Icon(
-                                imageVector = statusIcon,
-                                contentDescription = null,
-                                tint = tableTextColor,
-                                modifier = Modifier.size(13.dp)
-                            )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(end = 2.dp)
+                ) {
+                    if (onViewReservations != null) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (isAvailable) PinkPrimary.copy(alpha = 0.12f) else tableTextColor.copy(alpha = 0.18f),
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clickable { onViewReservations() }
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Visibility,
+                                    contentDescription = "View Reservations",
+                                    tint = if (isAvailable) PinkPrimary else tableTextColor,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
                         }
-                        if (showGuest) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = "Guests",
-                                tint = tableTextColor,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Text(
-                                text = (table.guestsCount ?: 0).toString(),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = tableTextColor
-                            )
-                        }
+                    }
+
+                    if (statusIcon != null) {
+                        Icon(
+                            imageVector = statusIcon,
+                            contentDescription = null,
+                            tint = tableTextColor,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                    if (showGuest) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Guests",
+                            tint = tableTextColor,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = (table.guestsCount ?: 0).toString(),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = tableTextColor
+                        )
                     }
                 }
             }
@@ -191,24 +211,21 @@ fun TableCard(
                     )
                     if (statusLower == "reserved") {
                         if (!table.reservedBy.isNullOrBlank()) {
-                            Text(
-                                text = table.reservedBy,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = tableTextColor.copy(alpha = 0.85f),
-                                textAlign = TextAlign.Center,
-                                maxLines = 1
-                            )
-                        }
-                        if (!reservedUntilShort.isNullOrBlank()) {
-                            Text(
-                                text = reservedUntilShort,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = tableTextColor.copy(alpha = 0.75f),
-                                textAlign = TextAlign.Center,
-                                maxLines = 1
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = tableTextColor.copy(alpha = 0.12f),
+                                modifier = Modifier.padding(top = 3.dp)
+                            ) {
+                                Text(
+                                    text = table.reservedBy,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = tableTextColor,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    maxLines = 1
+                                )
+                            }
                         }
                     } else if (!isAvailable) {
                         val displayStatus = table.statusLabel?.takeIf { it.isNotBlank() }

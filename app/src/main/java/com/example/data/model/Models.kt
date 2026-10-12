@@ -56,6 +56,21 @@ data class TableStatusInfo(
 )
 
 @JsonClass(generateAdapter = true)
+data class TableReservation(
+    @Json(name = "id") val id: String = "",
+    @Json(name = "res_tables_id") val tableId: String = "",
+    @Json(name = "customer_name") val customerName: String = "",
+    @Json(name = "customer_phone") val customerPhone: String? = null,
+    @Json(name = "guest_count") val guestCount: Int? = 1,
+    @Json(name = "reserved_from") val reservedFrom: String = "",
+    @Json(name = "reserved_to") val reservedTo: String = "",
+    @Json(name = "reservation_status") val status: Int? = 1,
+    @Json(name = "special_notes") val notes: String? = null,
+    @Json(name = "table_name") val tableName: String? = null,
+    @Json(name = "section_name") val sectionName: String? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class OrderItem(
     @Json(name = "id") val id: String = "",
     @Json(name = "product_id") val productId: String = "",
