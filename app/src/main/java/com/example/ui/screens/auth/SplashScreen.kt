@@ -67,19 +67,14 @@ fun SplashScreen(
                         .padding(bottom = 16.dp)
                 )
             } else {
-                Box(
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.elintom_logo),
+                    contentDescription = "ElintOM Logo",
                     modifier = Modifier
-                        .size(90.dp)
-                        .background(PinkPrimary.copy(alpha = 0.1f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Restaurant,
-                        contentDescription = null,
-                        tint = PinkPrimary,
-                        modifier = Modifier.size(48.dp)
-                    )
-                }
+                        .width(160.dp)
+                        .height(90.dp)
+                        .padding(bottom = 16.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(20.dp))

@@ -147,20 +147,14 @@ fun LoginScreen(
                                 .padding(bottom = 8.dp)
                         )
                     } else {
-                        Box(
+                        androidx.compose.foundation.Image(
+                            painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.elintom_logo),
+                            contentDescription = "ElintOM Logo",
                             modifier = Modifier
-                                .size(72.dp)
-                                .background(PinkPrimary.copy(alpha = 0.1f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Restaurant,
-                                contentDescription = null,
-                                tint = PinkPrimary,
-                                modifier = Modifier.size(36.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
+                                .width(140.dp)
+                                .height(64.dp)
+                                .padding(bottom = 8.dp)
+                        )
                     }
 
                     val siteName = uiState.branding.siteName?.ifBlank { null }
