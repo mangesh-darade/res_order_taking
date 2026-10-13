@@ -45,7 +45,10 @@ data class TableItem(
     @Json(name = "reserved_note") val reservedNote: String? = null,
     @Json(name = "status_label") val statusLabel: String? = null,
     @Json(name = "status_color") val statusColor: String? = null,
-    @Json(name = "status_text_color") val statusTextColor: String? = null
+    @Json(name = "status_text_color") val statusTextColor: String? = null,
+    @Json(name = "reservation_id") val reservationId: String? = null,
+    @Json(name = "reserved_from") val reservedFrom: String? = null,
+    @Json(name = "customer_phone") val customerPhone: String? = null
 )
 
 @JsonClass(generateAdapter = true)

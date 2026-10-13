@@ -714,24 +714,26 @@ fun TablesScreen(
     }
 
     if (uiState.reserveDialogTable != null) {
+        val currentTable = uiState.reserveDialogTable!!
         ReserveTableDialog(
-            table = uiState.reserveDialogTable!!,
+            table = currentTable,
             onDismiss = { viewModel.dismissConfirmDialog() },
             onReserve = { by, from, until, note, phone, guests, isEdit ->
                 viewModel.reserveTable(
-                    tableId = uiState.reserveDialogTable!!.id,
+                    tableId = currentTable.id,
                     customerName = by,
                     reservedFrom = from,
                     reservedUntil = until,
                     reservedNote = note,
                     customerPhone = phone,
                     guestCount = guests,
+                    reservationId = if (isEdit) currentTable.reservationId else null,
                     updateExisting = isEdit
                 )
             },
-            onUnreserve = { viewModel.unreserveTable(uiState.reserveDialogTable!!.id) },
+            onUnreserve = { viewModel.unreserveTable(currentTable.id) },
             onStartOrder = {
-                val id = uiState.reserveDialogTable!!.id
+                val id = currentTable.id
                 viewModel.dismissConfirmDialog()
                 onNavigateToOrders(id)
             }
@@ -755,12 +757,17 @@ private fun ReserveTableDialog(
     var reservedBy by remember(table.id) {
         mutableStateOf(if (isReserved) table.reservedBy.orEmpty() else "")
     }
-    var customerPhone by remember(table.id) { mutableStateOf("") }
+    var customerPhone by remember(table.id) {
+        mutableStateOf(if (isReserved) table.customerPhone.orEmpty() else "")
+    }
     var guestCountStr by remember(table.id) {
         mutableStateOf((table.guestsCount?.takeIf { it > 0 } ?: 2).toString())
     }
     var reservedFromMillis by remember(table.id) {
-        mutableStateOf(System.currentTimeMillis())
+        mutableStateOf(
+            if (isReserved) (parseReservedUntilMillis(table.reservedFrom) ?: System.currentTimeMillis())
+            else System.currentTimeMillis()
+        )
     }
     var reservedUntilMillis by remember(table.id) {
         mutableStateOf(parseReservedUntilMillis(table.reservedUntil) ?: defaultReservedUntilMillis())
@@ -775,23 +782,6 @@ private fun ReserveTableDialog(
 
     val fromDisplay = formatMillisForField(reservedFromMillis)
     val untilDisplay = formatMillisForField(reservedUntilMillis)
-
-    val activeMillis = if (pickingForFrom) reservedFromMillis else reservedUntilMillis
-    val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = startOfDayUtcMillis(activeMillis),
-        yearRange = IntRange(
-            Calendar.getInstance().get(Calendar.YEAR),
-            Calendar.getInstance().get(Calendar.YEAR) + 2
-        )
-    )
-    val initialCal = remember(activeMillis) {
-        Calendar.getInstance().apply { timeInMillis = activeMillis }
-    }
-    val timePickerState = rememberTimePickerState(
-        initialHour = initialCal.get(Calendar.HOUR_OF_DAY),
-        initialMinute = initialCal.get(Calendar.MINUTE),
-        is24Hour = true
-    )
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1061,6 +1051,9 @@ private fun ReserveTableDialog(
                                     editMode = true
                                     isBookingNewSlot = false
                                     reservedBy = table.reservedBy.orEmpty()
+                                    customerPhone = table.customerPhone.orEmpty()
+                                    guestCountStr = (table.guestsCount?.takeIf { it > 0 } ?: 2).toString()
+                                    reservedFromMillis = parseReservedUntilMillis(table.reservedFrom) ?: System.currentTimeMillis()
                                     reservedUntilMillis = parseReservedUntilMillis(table.reservedUntil) ?: defaultReservedUntilMillis()
                                     reservedNote = table.reservedNote.orEmpty()
                                     formError = null
@@ -1124,6 +1117,9 @@ private fun ReserveTableDialog(
                                     onClick = {
                                         isBookingNewSlot = false
                                         reservedBy = table.reservedBy.orEmpty()
+                                        customerPhone = table.customerPhone.orEmpty()
+                                        guestCountStr = (table.guestsCount?.takeIf { it > 0 } ?: 2).toString()
+                                        reservedFromMillis = parseReservedUntilMillis(table.reservedFrom) ?: System.currentTimeMillis()
                                         reservedUntilMillis = parseReservedUntilMillis(table.reservedUntil) ?: defaultReservedUntilMillis()
                                         reservedNote = table.reservedNote.orEmpty()
                                         formError = null
@@ -1420,6 +1416,14 @@ private fun ReserveTableDialog(
     }
 
     if (showDatePicker) {
+        val targetMillis = if (pickingForFrom) reservedFromMillis else reservedUntilMillis
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = startOfDayUtcMillis(targetMillis),
+            yearRange = IntRange(
+                Calendar.getInstance().get(Calendar.YEAR),
+                Calendar.getInstance().get(Calendar.YEAR) + 2
+            )
+        )
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
@@ -1445,6 +1449,15 @@ private fun ReserveTableDialog(
     }
 
     if (showTimePicker) {
+        val targetMillis = if (pickingForFrom) reservedFromMillis else reservedUntilMillis
+        val targetCal = remember(targetMillis) {
+            Calendar.getInstance().apply { timeInMillis = targetMillis }
+        }
+        val timePickerState = rememberTimePickerState(
+            initialHour = targetCal.get(Calendar.HOUR_OF_DAY),
+            initialMinute = targetCal.get(Calendar.MINUTE),
+            is24Hour = true
+        )
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
             title = { Text(if (pickingForFrom) "Select start time" else "Select end time") },
