@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.example.ui.components.PoweredByElintom
 import com.example.ui.theme.PinkPrimary
 import com.example.ui.theme.TextDark
 import com.example.ui.theme.TextMuted
@@ -100,5 +101,13 @@ fun SplashScreen(
                     .testTag("splash_loading_indicator")
             )
         }
+
+        PoweredByElintom(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp),
+            logoHeight = 22
+        )
     }
 }

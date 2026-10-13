@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.data.api.ApiSettingsManager
+import com.example.ui.components.PoweredByElintom
 import com.example.ui.components.SettingsDialog
 import com.example.ui.theme.PinkLightBg
 import com.example.ui.theme.PinkPrimary
@@ -341,7 +342,13 @@ fun LoginScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    PoweredByElintom(
+                        modifier = Modifier.fillMaxWidth(),
+                        textColor = TextMuted,
+                        logoHeight = 24
+                    )
                 }
             }
         }

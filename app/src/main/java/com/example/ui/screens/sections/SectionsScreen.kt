@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.components.MainTab
+import com.example.ui.components.PoweredByElintom
 import com.example.ui.components.SharedTabStrip
 import com.example.ui.components.TopHeaderBar
 import com.example.ui.theme.BackgroundGray
@@ -50,7 +51,24 @@ fun SectionsScreen(
 
     Scaffold(
         topBar = { TopHeaderBar(onLogoutClick = onLogoutClick) },
-        containerColor = BackgroundGray
+        containerColor = BackgroundGray,
+        bottomBar = {
+            Surface(
+                color = Color.White,
+                shadowElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(vertical = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    PoweredByElintom(logoHeight = 20)
+                }
+            }
+        }
     ) { innerPadding ->
 
         Column(

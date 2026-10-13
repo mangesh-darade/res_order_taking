@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ui.components.PoweredByElintom
 import com.example.ui.components.TopHeaderBar
 import com.example.ui.theme.*
 import com.example.util.CurrencyConfig
@@ -54,52 +55,63 @@ fun FinalizeScreen(
                 color = Color.White,
                 shadowElevation = 8.dp
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Back to Order
-                    OutlinedButton(
-                        onClick = onBackToOrder,
-                        colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White),
-                        border = androidx.compose.foundation.BorderStroke(2.dp, PinkPrimary),
-                        shape = RoundedCornerShape(8.dp),
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp)
-                            .testTag("back_to_order_button")
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Back to Order",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = PinkPrimary
-                        )
-                    }
-
-                    // Pink Total Amount box
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(50.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(PinkPrimary)
-                            .padding(horizontal = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Total Amount", fontSize = 11.sp, color = Color.White.copy(alpha = 0.9f))
+                        // Back to Order
+                        OutlinedButton(
+                            onClick = onBackToOrder,
+                            colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White),
+                            border = androidx.compose.foundation.BorderStroke(2.dp, PinkPrimary),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp)
+                                .testTag("back_to_order_button")
+                        ) {
                             Text(
-                                text = CurrencyConfig.format(order?.grandTotal ?: uiState.finalizeResult?.grandTotal ?: 0.0),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Black,
-                                color = Color.White
+                                text = "Back to Order",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PinkPrimary
                             )
                         }
+
+                        // Pink Total Amount box
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(PinkPrimary)
+                                .padding(horizontal = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Total Amount", fontSize = 11.sp, color = Color.White.copy(alpha = 0.9f))
+                                Text(
+                                    text = CurrencyConfig.format(order?.grandTotal ?: uiState.finalizeResult?.grandTotal ?: 0.0),
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color.White
+                                )
+                            }
+                        }
                     }
+
+                    PoweredByElintom(
+                        modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                        logoHeight = 18
+                    )
                 }
             }
         }

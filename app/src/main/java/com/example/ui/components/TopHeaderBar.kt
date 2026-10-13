@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -8,6 +9,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,8 +58,9 @@ fun TopHeaderBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(60.dp)
             .background(PinkPrimary)
+            .statusBarsPadding()
+            .height(60.dp)
             .padding(horizontal = 16.dp)
             .testTag("top_header_bar"),
         contentAlignment = Alignment.Center
@@ -66,67 +70,61 @@ fun TopHeaderBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Left: User Profile badge or Date
+            // Left: Site Name & Status Dot/Role
             Column(
                 verticalArrangement = Arrangement.Center,
                 modifier = Modifier
-                    .weight(1f, fill = false)
+                    .weight(1.3f, fill = false)
                     .clickable { showSyncDialog = true }
                     .padding(vertical = 4.dp)
             ) {
-                if (currentUser != null) {
-                    Text(
-                        text = currentUser?.displayName ?: "Staff Member",
-                        color = Color.White,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val statusDotColor = when {
-                            failedCount > 0 -> Color(0xFFF44336)
-                            !isOnline -> if (isGracePeriodExpired) Color(0xFFD32F2F) else Color(0xFFFF9800)
-                            pendingCount > 0 -> Color(0xFFFFC107)
-                            else -> Color(0xFF4CAF50)
-                        }
-                        Surface(
-                            shape = CircleShape,
-                            color = statusDotColor,
-                            modifier = Modifier.size(7.dp)
-                        ) {}
-                        Spacer(modifier = Modifier.width(4.dp))
-                        val statusText = when {
-                            failedCount > 0 -> "SYNC FAILED ($failedCount)"
-                            !isOnline -> {
-                                if (isGracePeriodExpired) "OFFLINE LOCKED ($pendingCount)"
-                                else if (offlineRemainingSeconds != null) "OFFLINE: ${offlineRemainingSeconds}s ($pendingCount)"
-                                else "OFFLINE ($pendingCount)"
-                            }
-                            pendingCount > 0 -> "SYNCING ($pendingCount)"
-                            else -> currentUser?.role ?: "Captain"
-                        }
-                        Text(
-                            text = statusText,
-                            color = if (failedCount > 0 || isGracePeriodExpired) Color(0xFFFFCDD2) else Color.White.copy(alpha = 0.9f),
-                            fontSize = 10.sp,
-                            fontWeight = if (failedCount > 0 || isGracePeriodExpired) FontWeight.Bold else FontWeight.Medium
-                        )
+                val siteTitle = branding.siteName?.ifBlank { null } ?: "ELINTOM RESTAURANT"
+                Text(
+                    text = siteTitle,
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag("header_site_name")
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val statusDotColor = when {
+                        failedCount > 0 -> Color(0xFFF44336)
+                        !isOnline -> if (isGracePeriodExpired) Color(0xFFD32F2F) else Color(0xFFFF9800)
+                        pendingCount > 0 -> Color(0xFFFFC107)
+                        else -> Color(0xFF4CAF50)
                     }
-                } else {
+                    Surface(
+                        shape = CircleShape,
+                        color = statusDotColor,
+                        modifier = Modifier.size(7.dp)
+                    ) {}
+                    Spacer(modifier = Modifier.width(4.dp))
+                    val statusText = when {
+                        failedCount > 0 -> "SYNC FAILED ($failedCount)"
+                        !isOnline -> {
+                            if (isGracePeriodExpired) "OFFLINE LOCKED ($pendingCount)"
+                            else if (offlineRemainingSeconds != null) "OFFLINE: ${offlineRemainingSeconds}s ($pendingCount)"
+                            else "OFFLINE ($pendingCount)"
+                        }
+                        pendingCount > 0 -> "SYNCING ($pendingCount)"
+                        else -> currentUser?.role ?: "Captain / Waiter"
+                    }
                     Text(
-                        text = todayDate,
-                        color = Color.White,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.testTag("today_date_text")
+                        text = statusText,
+                        color = if (failedCount > 0 || isGracePeriodExpired) Color(0xFFFFCDD2) else Color.White.copy(alpha = 0.9f),
+                        fontSize = 10.sp,
+                        fontWeight = if (failedCount > 0 || isGracePeriodExpired) FontWeight.Bold else FontWeight.Medium
                     )
                 }
             }
 
-            // Center: App / Site brand title & Logo from settings
+            // Center: App / Site brand logo & sync status badge
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .weight(1.5f, fill = false)
+                    .weight(1.2f, fill = false)
                     .clickable { showSyncDialog = true }
                     .padding(horizontal = 4.dp),
                 horizontalArrangement = Arrangement.Center
@@ -137,21 +135,18 @@ fun TopHeaderBar(
                         model = logoUrl,
                         contentDescription = branding.siteName ?: "Logo",
                         modifier = Modifier
-                            .height(34.dp)
-                            .padding(end = 8.dp)
+                            .height(30.dp)
+                            .padding(end = 4.dp)
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(id = com.example.R.drawable.elintom_logo),
+                        contentDescription = "ElintOM",
+                        modifier = Modifier
+                            .height(26.dp)
+                            .padding(end = 4.dp)
                     )
                 }
-                val brandTitle = branding.siteName?.ifBlank { null } ?: "ELINTOM"
-                Text(
-                    text = brandTitle.uppercase(),
-                    color = Color.White,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.1.sp,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    modifier = Modifier.testTag("app_brand_title")
-                )
                 if (failedCount > 0) {
                     Spacer(modifier = Modifier.width(6.dp))
                     Surface(

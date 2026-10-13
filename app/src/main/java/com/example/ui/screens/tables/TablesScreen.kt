@@ -42,6 +42,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.model.TableItem
 import com.example.data.model.TableReservation
 import com.example.ui.components.MainTab
+import com.example.ui.components.PoweredByElintom
 import com.example.ui.components.SharedTabStrip
 import com.example.ui.components.TableCard
 import com.example.ui.components.TopHeaderBar
@@ -81,7 +82,24 @@ fun TablesScreen(
     Scaffold(
         topBar = { TopHeaderBar(onLogoutClick = onLogoutClick) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = BackgroundGray
+        containerColor = BackgroundGray,
+        bottomBar = {
+            Surface(
+                color = Color.White,
+                shadowElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(vertical = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    PoweredByElintom(logoHeight = 20)
+                }
+            }
+        }
     ) { innerPadding ->
         Column(
             modifier = Modifier

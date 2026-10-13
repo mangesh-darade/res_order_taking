@@ -34,8 +34,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.model.GuestOrder
 import com.example.data.model.OrderItem
 import androidx.compose.material.icons.filled.GridView
-import com.example.ui.components.OrderItemsGridDialog
 import com.example.ui.components.MainTab
+import com.example.ui.components.OrderItemsGridDialog
+import com.example.ui.components.PoweredByElintom
 import com.example.ui.components.SharedTabStrip
 import com.example.ui.components.TopHeaderBar
 import com.example.ui.screens.menu.CustomizationBottomSheet
@@ -128,63 +129,74 @@ fun OrdersScreen(
                 color = Color.White,
                 shadowElevation = 8.dp
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                        .height(52.dp)
-                        .testTag("orders_bottom_bar"),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Left Button: KOT (pending), Cooking... (in kitchen), or Served (when ready)
-                    Button(
-                        onClick = {
-                            if (showServed) viewModel.markServed() else if (hasPending) viewModel.sendKot(context)
-                        },
-                        enabled = leftButtonEnabled,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = leftButtonBgColor,
-                            disabledContainerColor = Color.Gray.copy(alpha = 0.4f)
-                        ),
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(8.dp))
-                            .testTag("kot_button"),
-                        shape = RoundedCornerShape(8.dp)
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .testTag("orders_bottom_bar"),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = leftButtonText,
-                            fontSize = 19.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
-                        )
+                        // Left Button: KOT (pending), Cooking... (in kitchen), or Served (when ready)
+                        Button(
+                            onClick = {
+                                if (showServed) viewModel.markServed() else if (hasPending) viewModel.sendKot(context)
+                            },
+                            enabled = leftButtonEnabled,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = leftButtonBgColor,
+                                disabledContainerColor = Color.Gray.copy(alpha = 0.4f)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(8.dp))
+                                .testTag("kot_button"),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = leftButtonText,
+                                fontSize = 19.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White
+                            )
+                        }
+
+                        // Right Button: Proceed Bill (White + Pink Border)
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.validateAndFinalize {
+                                    showProceedBillConfirm = true
+                                }
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White),
+                            border = androidx.compose.foundation.BorderStroke(2.dp, PinkPrimary),
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(8.dp))
+                                .testTag("finalize_order_button"),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = "Proceed Bill",
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PinkPrimary
+                            )
+                        }
                     }
 
-                    // Right Button: Proceed Bill (White + Pink Border)
-                    OutlinedButton(
-                        onClick = {
-                            viewModel.validateAndFinalize {
-                                showProceedBillConfirm = true
-                            }
-                        },
-                        colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White),
-                        border = androidx.compose.foundation.BorderStroke(2.dp, PinkPrimary),
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(8.dp))
-                            .testTag("finalize_order_button"),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            text = "Proceed Bill",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = PinkPrimary
-                        )
-                    }
+                    PoweredByElintom(
+                        modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                        logoHeight = 18
+                    )
                 }
             }
         }
