@@ -575,9 +575,9 @@ fun DivisionPrinterCard(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             val spacingOptions = listOf(
-                                Triple(24, "Compact", "Save Paper"),
-                                Triple(32, "Normal", "Standard"),
-                                Triple(40, "Wide", "Spacious")
+                                Triple(30, "Compact", "Save Paper"),
+                                Triple(36, "Normal", "Standard (Rec.)"),
+                                Triple(44, "Wide", "Spacious")
                             )
                             spacingOptions.forEach { (dots, label, desc) ->
                                 val sel = config.lineSpacing == dots

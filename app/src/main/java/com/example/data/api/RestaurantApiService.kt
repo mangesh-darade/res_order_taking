@@ -48,11 +48,28 @@ interface RestaurantApiService {
         @Field("order_id") orderId: String? = null
     ): Response<ApiResponse<OrderBootstrap>>
 
+    @GET("customers")
+    suspend fun getCustomers(
+        @Query("search") search: String? = null,
+        @Query("limit") limit: Int = 50
+    ): Response<ApiResponse<List<CustomerItem>>>
+
+    @FormUrlEncoded
+    @POST("assign_customer")
+    suspend fun assignCustomer(
+        @Field("order_id") orderId: String? = null,
+        @Field("table_id") tableId: String? = null,
+        @Field("customer_id") customerId: String,
+        @Field("customer_name") customerName: String? = null
+    ): Response<ApiResponse<OrderBootstrap>>
+
     @FormUrlEncoded
     @POST("create_order")
     suspend fun createOrder(
         @Field("table_id") tableId: String,
-        @Field("guest_count") guestCount: Int
+        @Field("guest_count") guestCount: Int,
+        @Field("customer_id") customerId: String? = null,
+        @Field("customer_name") customerName: String? = null
     ): Response<ApiResponse<OrderBootstrap>>
 
     @FormUrlEncoded

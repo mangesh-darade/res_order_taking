@@ -14,9 +14,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,6 +35,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.model.GuestOrder
 import com.example.data.model.OrderItem
@@ -366,6 +373,72 @@ fun OrdersScreen(
                         }
                     }
 
+                    // Customer Selector Row
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(1.dp, PinkPrimary.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                            .clickable { viewModel.openCustomerSheet() }
+                            .testTag("customer_selection_bar"),
+                        color = Color(0xFFFFF5F8)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = "Customer",
+                                    tint = PinkPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Customer: ",
+                                        fontSize = 12.sp,
+                                        color = TextMuted,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = order.customerName ?: "Walk-in Customer",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextDark,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "Change",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PinkPrimary
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Change Customer",
+                                    tint = PinkPrimary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+
                     // Title: Order Items (X Items)
                     Row(
                         modifier = Modifier
@@ -572,6 +645,196 @@ fun OrdersScreen(
                 }
             }
         )
+    }
+
+    if (uiState.isCustomerSheetOpen) {
+        Dialog(
+            onDismissRequest = { viewModel.closeCustomerSheet() },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth(0.92f)
+                    .fillMaxHeight(0.75f)
+                    .clip(RoundedCornerShape(16.dp)),
+                color = Color.White,
+                shadowElevation = 8.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                ) {
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = PinkPrimary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Select Customer",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextDark
+                            )
+                        }
+                        IconButton(onClick = { viewModel.closeCustomerSheet() }) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = Color.Gray
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Search OutlinedTextField
+                    OutlinedTextField(
+                        value = uiState.customerSearchQuery,
+                        onValueChange = { viewModel.onCustomerSearchQueryChanged(it) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("customer_search_input"),
+                        placeholder = { Text("Search by name, phone, room, card, custom fields...") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = PinkPrimary
+                            )
+                        },
+                        trailingIcon = {
+                            if (uiState.customerSearchQuery.isNotBlank()) {
+                                IconButton(onClick = { viewModel.onCustomerSearchQueryChanged("") }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.Gray)
+                                }
+                            }
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = PinkPrimary,
+                            cursorColor = PinkPrimary
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Customer List
+                    if (uiState.isCustomerLoading || uiState.isAssigningCustomer) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = PinkPrimary)
+                        }
+                    } else if (uiState.customerList.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "No customers found",
+                                color = TextMuted,
+                                fontSize = 14.sp
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(uiState.customerList) { customer ->
+                                val isSelected = uiState.order?.customerId == customer.id
+                                val displayName = customer.displayName ?: if (!customer.company.isNullOrBlank() && customer.company != "-") customer.company else customer.name
+
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .border(
+                                            width = if (isSelected) 2.dp else 1.dp,
+                                            color = if (isSelected) PinkPrimary else Color(0xFFE2E8F0),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .clickable { viewModel.selectCustomer(customer) },
+                                    color = if (isSelected) PinkLightBg else Color.White
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = displayName,
+                                                fontSize = 15.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                                color = if (isSelected) PinkDark else TextDark
+                                            )
+                                            if (!customer.phone.isNullOrBlank()) {
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Phone,
+                                                        contentDescription = null,
+                                                        tint = TextMuted,
+                                                        modifier = Modifier.size(12.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(
+                                                        text = customer.phone,
+                                                        fontSize = 12.sp,
+                                                        color = TextMuted
+                                                    )
+                                                }
+                                            }
+                                            if (!customer.customFieldsSummary.isNullOrBlank()) {
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = customer.customFieldsSummary,
+                                                    fontSize = 11.sp,
+                                                    color = PinkPrimary,
+                                                    fontWeight = FontWeight.Medium,
+                                                    maxLines = 1,
+                                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+
+                                        if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = "Selected",
+                                                tint = PinkPrimary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

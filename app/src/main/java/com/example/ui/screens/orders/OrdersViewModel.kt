@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.api.PrinterSettingsManager
 import com.example.util.ThermalPrinterManager
+import com.example.data.model.CustomerItem
 import com.example.data.model.CustomizationOption
 import com.example.data.model.MenuItem
 import com.example.data.model.OrderBootstrap
@@ -33,7 +34,12 @@ data class OrdersUiState(
     val editMenuItem: MenuItem? = null,
     val editCustomization: ProductCustomization? = null,
     val isEditLoading: Boolean = false,
-    val kdsEnabled: Boolean = true
+    val kdsEnabled: Boolean = true,
+    val isCustomerSheetOpen: Boolean = false,
+    val customerSearchQuery: String = "",
+    val customerList: List<CustomerItem> = emptyList(),
+    val isCustomerLoading: Boolean = false,
+    val isAssigningCustomer: Boolean = false
 )
 
 class OrdersViewModel(
@@ -309,13 +315,20 @@ class OrdersViewModel(
                             for ((divId, divItems) in grouped) {
                                 val cfg = configs.find { it.divisionId == divId }
                                 if (cfg != null && cfg.isEnabled) {
+                                    val authRepo = com.example.data.repository.AuthRepository.getInstance()
+                                    authRepo.init(context)
+                                    val captain = authRepo.currentUser.value?.displayName
+                                        ?: authRepo.currentUser.value?.username
+                                        ?: ""
+
                                     ThermalPrinterManager.printKotSlip(
                                         context = context,
                                         config = cfg,
                                         orderId = orderId,
                                         tableName = tableName,
                                         items = divItems,
-                                        orderType = "Dine in"
+                                        orderType = "Dine in",
+                                        waiterName = captain
                                     )
                                 }
                             }
@@ -385,8 +398,77 @@ class OrdersViewModel(
         _uiState.value = _uiState.value.copy(snackbarMessage = null)
     }
 
+    fun openCustomerSheet() {
+        _uiState.value = _uiState.value.copy(
+            isCustomerSheetOpen = true,
+            customerSearchQuery = ""
+        )
+        searchCustomers("")
+    }
+
+    fun closeCustomerSheet() {
+        _uiState.value = _uiState.value.copy(isCustomerSheetOpen = false)
+    }
+
+    fun onCustomerSearchQueryChanged(query: String) {
+        _uiState.value = _uiState.value.copy(customerSearchQuery = query)
+        searchCustomers(query)
+    }
+
+    private var customerSearchJob: Job? = null
+
+    fun searchCustomers(query: String) {
+        customerSearchJob?.cancel()
+        customerSearchJob = viewModelScope.launch {
+            if (query.isNotBlank()) {
+                delay(300) // debounce
+            }
+            _uiState.value = _uiState.value.copy(isCustomerLoading = true)
+            val result = repository.searchCustomers(query)
+            result.onSuccess { list ->
+                _uiState.value = _uiState.value.copy(
+                    customerList = list,
+                    isCustomerLoading = false
+                )
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(isCustomerLoading = false)
+            }
+        }
+    }
+
+    fun selectCustomer(customer: CustomerItem) {
+        val currentOrder = _uiState.value.order
+        val orderId = currentOrder?.orderId
+        val tableId = _uiState.value.tableId ?: currentOrder?.tableId
+        val displayName = customer.displayName ?: if (!customer.company.isNullOrBlank() && customer.company != "-") customer.company else customer.name
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isAssigningCustomer = true)
+            val result = repository.assignCustomer(
+                orderId = orderId,
+                tableId = tableId,
+                customerId = customer.id,
+                customerName = displayName
+            )
+            result.onSuccess { updated ->
+                _uiState.value = _uiState.value.copy(
+                    order = updated,
+                    isAssigningCustomer = false,
+                    isCustomerSheetOpen = false,
+                    snackbarMessage = "Customer updated: $displayName"
+                )
+            }.onFailure { e ->
+                _uiState.value = _uiState.value.copy(
+                    isAssigningCustomer = false,
+                    snackbarMessage = e.message ?: "Failed to assign customer"
+                )
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         autoRefreshJob?.cancel()
+        customerSearchJob?.cancel()
     }
 }

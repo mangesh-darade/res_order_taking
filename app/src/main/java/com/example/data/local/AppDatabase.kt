@@ -269,19 +269,47 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private fun addColumnIfNotExists(
+            db: SupportSQLiteDatabase,
+            tableName: String,
+            columnName: String,
+            columnDefinition: String
+        ) {
+            var exists = false
+            try {
+                db.query("PRAGMA table_info($tableName)").use { cursor ->
+                    val nameIndex = cursor.getColumnIndex("name")
+                    while (cursor.moveToNext()) {
+                        if (nameIndex != -1 && cursor.getString(nameIndex).equals(columnName, ignoreCase = true)) {
+                            exists = true
+                            break
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+
+            if (!exists) {
+                try {
+                    db.execSQL("ALTER TABLE $tableName ADD COLUMN $columnName $columnDefinition")
+                } catch (_: Exception) {
+                    // Safe fallback if column was added concurrently or already exists
+                }
+            }
+        }
+
         private val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE pending_sync_queue ADD COLUMN status TEXT NOT NULL DEFAULT 'PENDING'")
-                db.execSQL("ALTER TABLE pending_sync_queue ADD COLUMN last_error_message TEXT DEFAULT NULL")
-                db.execSQL("ALTER TABLE pending_sync_queue ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0")
+                addColumnIfNotExists(db, "pending_sync_queue", "status", "TEXT NOT NULL DEFAULT 'PENDING'")
+                addColumnIfNotExists(db, "pending_sync_queue", "last_error_message", "TEXT DEFAULT NULL")
+                addColumnIfNotExists(db, "pending_sync_queue", "updated_at", "INTEGER NOT NULL DEFAULT 0")
             }
         }
 
         private val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE sma_res_tables ADD COLUMN status_color TEXT DEFAULT NULL")
-                db.execSQL("ALTER TABLE sma_res_tables ADD COLUMN status_text_color TEXT DEFAULT NULL")
-                db.execSQL("ALTER TABLE sma_res_tables ADD COLUMN status_label TEXT DEFAULT NULL")
+                addColumnIfNotExists(db, "sma_res_tables", "status_color", "TEXT DEFAULT NULL")
+                addColumnIfNotExists(db, "sma_res_tables", "status_text_color", "TEXT DEFAULT NULL")
+                addColumnIfNotExists(db, "sma_res_tables", "status_label", "TEXT DEFAULT NULL")
             }
         }
 

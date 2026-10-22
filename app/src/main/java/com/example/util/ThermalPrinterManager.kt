@@ -89,10 +89,57 @@ object ThermalPrinterManager {
     private val ESC_ALIGN_RIGHT = byteArrayOf(0x1B, 0x61, 0x02)
     private val ESC_BOLD_ON = byteArrayOf(0x1B, 0x45, 0x01)
     private val ESC_BOLD_OFF = byteArrayOf(0x1B, 0x45, 0x00)
+    private val ESC_FONT_A = byteArrayOf(0x1B, 0x4D, 0x00) // Standard Font (12x24)
+    private val ESC_FONT_B = byteArrayOf(0x1B, 0x4D, 0x01) // Small / Compressed Font (9x17)
     private val ESC_DOUBLE_SIZE = byteArrayOf(0x1D, 0x21, 0x11)
+    private val ESC_DOUBLE_HEIGHT = byteArrayOf(0x1D, 0x21, 0x01) // 2x height, standard width (high visibility in kitchen)
+    private val ESC_DOUBLE_WIDTH = byteArrayOf(0x1D, 0x21, 0x10) // standard height, 2x width
     private val ESC_NORMAL_SIZE = byteArrayOf(0x1D, 0x21, 0x00)
     private val ESC_CUT_PAPER = byteArrayOf(0x1D, 0x56, 0x41, 0x10) // Cut full/partial with feed
     private val ESC_BUZZER = byteArrayOf(0x1B, 0x42, 0x02, 0x02, 0x07) // Beep 2 times + BEL
+
+    /**
+     * Smart word-wrapping helper that wraps lines cleanly at word boundaries
+     * and indents continuation lines so words are never chopped in half.
+     */
+    fun wrapWords(text: String, maxWidth: Int): List<String> {
+        if (text.length <= maxWidth) return listOf(text)
+        val words = text.split(" ")
+        val lines = mutableListOf<String>()
+        var currentLine = StringBuilder()
+
+        for (word in words) {
+            if (currentLine.isEmpty()) {
+                currentLine.append(word)
+            } else if (currentLine.length + 1 + word.length <= maxWidth) {
+                currentLine.append(" ").append(word)
+            } else {
+                lines.add(currentLine.toString())
+                currentLine = StringBuilder("   ").append(word)
+            }
+        }
+        if (currentLine.isNotEmpty()) {
+            lines.add(currentLine.toString())
+        }
+        return lines
+    }
+
+    /**
+     * Format a row with left-aligned and right-aligned text distributed across full width.
+     * Eliminates empty right section space and balances 80mm (48 col) / 58mm (32 col) paper.
+     */
+    fun formatTwoColumns(left: String, right: String, width: Int): String {
+        val cleanLeft = left.trim()
+        val cleanRight = right.trim()
+        val totalLen = cleanLeft.length + cleanRight.length
+        return if (totalLen >= width) {
+            val maxLeft = (width - cleanRight.length - 1).coerceAtLeast(0)
+            cleanLeft.take(maxLeft) + " " + cleanRight + "\n"
+        } else {
+            val spaces = width - totalLen
+            cleanLeft + " ".repeat(spaces) + cleanRight + "\n"
+        }
+    }
 
     /**
      * Send byte array directly over Network (LAN / WiFi / Ethernet IP:Port).
@@ -190,11 +237,12 @@ object ThermalPrinterManager {
         val out = ByteArrayOutputStream()
         val width = if (config.paperSize == "58mm") 32 else 48
         val line = "-".repeat(width)
+        val doubleLine = "=".repeat(width)
 
         out.write(ESC_INIT)
 
-        // Set Line Spacing (ESC 3 n)
-        val ls = config.lineSpacing.coerceIn(16, 64)
+        // Set Line Spacing (minimum 32 dots for clear breathing room)
+        val ls = config.lineSpacing.coerceIn(32, 64)
         out.write(byteArrayOf(0x1B, 0x33, ls.toByte()))
 
         // Sound Buzzer if enabled
@@ -207,31 +255,34 @@ object ThermalPrinterManager {
         out.write(ESC_DOUBLE_SIZE)
         out.write("*** TEST PRINT ***\n".toByteArray(Charsets.US_ASCII))
         out.write(ESC_NORMAL_SIZE)
-        out.write(ESC_BOLD_OFF)
         out.write("${config.divisionName}\n".toByteArray(Charsets.US_ASCII))
-        out.write("$line\n".toByteArray(Charsets.US_ASCII))
+        out.write(ESC_BOLD_OFF)
+        out.write("$doubleLine\n".toByteArray(Charsets.US_ASCII))
 
         out.write(ESC_ALIGN_LEFT)
-        out.write("Connection  : ${config.connectionType.name}\n".toByteArray(Charsets.US_ASCII))
+        out.write(formatTwoColumns("Connection: ${config.connectionType.name}", "Paper: ${config.paperSize}", width).toByteArray(Charsets.US_ASCII))
         if (config.connectionType == PrinterConnectionType.NETWORK) {
-            out.write("IP Address  : ${config.ipAddress}:${config.port}\n".toByteArray(Charsets.US_ASCII))
+            out.write(formatTwoColumns("IP Address: ${config.ipAddress}", "Port: ${config.port}", width).toByteArray(Charsets.US_ASCII))
         } else {
-            out.write("USB Device  : ${config.usbDeviceName.ifBlank { "Default USB" }}\n".toByteArray(Charsets.US_ASCII))
+            out.write(formatTwoColumns("USB Device: ${config.usbDeviceName.ifBlank { "Default USB" }}", "", width).toByteArray(Charsets.US_ASCII))
         }
-        out.write("Paper Size  : ${config.paperSize}\n".toByteArray(Charsets.US_ASCII))
-        out.write("Auto-Cut    : ${if (config.autoCut) "Enabled" else "Disabled"}\n".toByteArray(Charsets.US_ASCII))
-        out.write("Line Spacing: ${config.lineSpacing} dots\n".toByteArray(Charsets.US_ASCII))
-        out.write("Buzzer/Beep : ${if (config.soundBuzzer) "Enabled" else "Disabled"}\n".toByteArray(Charsets.US_ASCII))
-        out.write("Copies      : ${config.printCopies}\n".toByteArray(Charsets.US_ASCII))
-        val dateStr = SimpleDateFormat("dd-MMM-yyyy HH:mm:ss", Locale.getDefault()).format(Date())
-        out.write("Date & Time : $dateStr\n".toByteArray(Charsets.US_ASCII))
-        out.write("$line\n".toByteArray(Charsets.US_ASCII))
+        out.write(formatTwoColumns("Auto-Cut: ${if (config.autoCut) "Enabled" else "Disabled"}", "Buzzer: ${if (config.soundBuzzer) "Enabled" else "Disabled"}", width).toByteArray(Charsets.US_ASCII))
+        out.write(formatTwoColumns("Line Spacing: ${config.lineSpacing} dots", "Copies: ${config.printCopies}", width).toByteArray(Charsets.US_ASCII))
+
+        val dateStr = SimpleDateFormat("dd-MMM-yyyy", Locale.getDefault()).format(Date())
+        val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+        out.write(formatTwoColumns("Date: $dateStr", "Time: $timeStr", width).toByteArray(Charsets.US_ASCII))
+        out.write("$doubleLine\n".toByteArray(Charsets.US_ASCII))
 
         out.write(ESC_ALIGN_CENTER)
-        out.write("Status: PRINTER READY!\n".toByteArray(Charsets.US_ASCII))
+        out.write(ESC_BOLD_ON)
+        out.write(ESC_DOUBLE_HEIGHT)
+        out.write("STATUS: PRINTER READY!\n".toByteArray(Charsets.US_ASCII))
+        out.write(ESC_NORMAL_SIZE)
+        out.write(ESC_BOLD_OFF)
 
-        // Feed blank lines before cut
-        val feedCount = config.feedLinesBeforeCut.coerceIn(1, 8)
+        // Feed blank lines before cut (minimum 3 lines for clean cut)
+        val feedCount = config.feedLinesBeforeCut.coerceIn(3, 8)
         out.write("\n".repeat(feedCount).toByteArray(Charsets.US_ASCII))
 
         // Auto Cut if enabled
@@ -270,8 +321,10 @@ object ThermalPrinterManager {
             return Result.success("Skipped (Disabled or No Items)")
         }
 
-        val width = if (config.paperSize == "58mm") 32 else 48
-        val line = "-".repeat(width)
+        val margin = if (config.paperSize == "58mm") "  " else "    "
+        val contentWidth = if (config.paperSize == "58mm") 28 else 40
+        val singleLine = margin + "-".repeat(contentWidth) + "\n"
+        val doubleLine = margin + "=".repeat(contentWidth) + "\n"
         val copies = config.printCopies.coerceIn(1, 4)
 
         val fullStream = ByteArrayOutputStream()
@@ -279,101 +332,175 @@ object ThermalPrinterManager {
         for (copyNum in 1..copies) {
             val out = ByteArrayOutputStream()
             out.write(ESC_INIT)
+            out.write(ESC_NORMAL_SIZE)
+            out.write(ESC_BOLD_OFF)
 
-            // Set Line Spacing (ESC 3 n)
-            val ls = config.lineSpacing.coerceIn(16, 64)
-            out.write(byteArrayOf(0x1B, 0x33, ls.toByte()))
+            // Set compact default line spacing
+            out.write(byteArrayOf(0x1B, 0x32))
 
             // Kitchen Sound Buzzer
             if (config.soundBuzzer) {
                 out.write(ESC_BUZZER)
             }
 
-            out.write(ESC_ALIGN_CENTER)
+            out.write(ESC_ALIGN_LEFT)
 
-            // Prominent Order Type Badge (PARCEL / TAKEAWAY vs DINE-IN)
-            if (config.showOrderType) {
-                val isParcel = orderType.contains("parcel", ignoreCase = true) ||
-                        orderType.contains("takeaway", ignoreCase = true) ||
-                        orderType.contains("take away", ignoreCase = true) ||
-                        orderType.contains("delivery", ignoreCase = true)
+            val isParcel = orderType.contains("parcel", ignoreCase = true) ||
+                    orderType.contains("takeaway", ignoreCase = true) ||
+                    orderType.contains("take away", ignoreCase = true) ||
+                    orderType.contains("delivery", ignoreCase = true)
 
-                out.write(ESC_BOLD_ON)
-                out.write(ESC_DOUBLE_SIZE)
-                if (isParcel) {
-                    out.write("*** [ PARCEL / TAKEAWAY ] ***\n".toByteArray(Charsets.US_ASCII))
-                } else {
-                    out.write("[ DINE-IN ]\n".toByteArray(Charsets.US_ASCII))
-                }
-                out.write(ESC_NORMAL_SIZE)
-                out.write(ESC_BOLD_OFF)
+            if (isParcel) {
+                out.write((margin + formatTwoColumns("", "[ TAKEAWAY ]", contentWidth)).toByteArray(Charsets.US_ASCII))
             }
 
-            // KOT Station Header
-            out.write(ESC_BOLD_ON)
-            out.write("K.O.T. [${config.divisionName.uppercase()}]\n".toByteArray(Charsets.US_ASCII))
             if (copies > 1) {
-                out.write("(Copy $copyNum of $copies)\n".toByteArray(Charsets.US_ASCII))
+                out.write((margin + "(Copy $copyNum of $copies)\n").toByteArray(Charsets.US_ASCII))
             }
+
+            // Top double separator line
+            out.write(doubleLine.toByteArray(Charsets.US_ASCII))
+
+            // 2. Table & KOT header (Bold & prominent!)
+            out.write(ESC_BOLD_ON)
+            val tableText = "TABLE: $tableName"
+            val kotNum = if (kotToken.isNotBlank()) kotToken else orderId
+            val cleanKotNum = kotNum.removePrefix("#")
+            val kotText = "KOT: #$cleanKotNum"
+            out.write((margin + formatTwoColumns(tableText, kotText, contentWidth)).toByteArray(Charsets.US_ASCII))
             out.write(ESC_BOLD_OFF)
+
+            // Captain Name & Time (placed directly beneath KOT / Table)
+            val resolvedCaptain = if (waiterName.isNotBlank()) {
+                waiterName
+            } else {
+                try {
+                    val auth = com.example.data.repository.AuthRepository.getInstance()
+                    auth.init(context)
+                    auth.currentUser.value?.displayName ?: auth.currentUser.value?.username ?: ""
+                } catch (_: Exception) {
+                    ""
+                }
+            }
 
             val timeStr = SimpleDateFormat("dd/MM/yy HH:mm", Locale.getDefault()).format(Date())
-            out.write("Order: $orderId | Table: $tableName\n".toByteArray(Charsets.US_ASCII))
-            if (kotToken.isNotBlank()) {
-                out.write("Token: $kotToken | Time: $timeStr\n".toByteArray(Charsets.US_ASCII))
-            } else {
-                out.write("Time: $timeStr\n".toByteArray(Charsets.US_ASCII))
-            }
+            val timeText = "Time: $timeStr"
+            val captText = if (resolvedCaptain.isNotBlank()) "Captain: $resolvedCaptain" else ""
 
-            if (config.showWaiterName && waiterName.isNotBlank()) {
-                out.write("Waiter/Captain: $waiterName\n".toByteArray(Charsets.US_ASCII))
-            }
-
-            out.write("$line\n".toByteArray(Charsets.US_ASCII))
-
-            // Items Header (QTY and ITEM DESCRIPTION only)
-            out.write(ESC_ALIGN_LEFT)
-            out.write(ESC_BOLD_ON)
-            if (width == 32) {
-                out.write(String.format(Locale.US, "%-4s %-27s\n", "QTY", "ITEM DESCRIPTION").toByteArray(Charsets.US_ASCII))
-            } else {
-                out.write(String.format(Locale.US, "%-5s %-42s\n", "QTY", "ITEM DESCRIPTION").toByteArray(Charsets.US_ASCII))
-            }
-            out.write(ESC_BOLD_OFF)
-            out.write("$line\n".toByteArray(Charsets.US_ASCII))
-
-            // Print each item for this station
-            for (item in items) {
-                val qtyStr = "${item.quantity}x"
-                val maxLen = if (width == 32) 27 else 42
-                val name = if (item.productName.length > maxLen) item.productName.take(maxLen) else item.productName
-                out.write(ESC_BOLD_ON)
-                if (width == 32) {
-                    out.write(String.format(Locale.US, "%-4s %-27s\n", qtyStr, name).toByteArray(Charsets.US_ASCII))
+            if (captText.isNotBlank()) {
+                if (timeText.length + captText.length + 1 <= contentWidth) {
+                    out.write((margin + formatTwoColumns(timeText, captText, contentWidth)).toByteArray(Charsets.US_ASCII))
                 } else {
-                    out.write(String.format(Locale.US, "%-5s %-42s\n", qtyStr, name).toByteArray(Charsets.US_ASCII))
+                    out.write((margin + timeText + "\n").toByteArray(Charsets.US_ASCII))
+                    if (captText.length <= contentWidth) {
+                        out.write((margin + formatTwoColumns("", captText, contentWidth)).toByteArray(Charsets.US_ASCII))
+                    } else {
+                        out.write((margin + captText + "\n").toByteArray(Charsets.US_ASCII))
+                    }
+                }
+            } else {
+                out.write((margin + timeText + "\n").toByteArray(Charsets.US_ASCII))
+            }
+
+            // Double separator line
+            out.write(doubleLine.toByteArray(Charsets.US_ASCII))
+
+            // 3. Items Column Header: "ITEM DESCRIPTION" left, "QTY" right (Bold!)
+            out.write(ESC_BOLD_ON)
+            out.write((margin + formatTwoColumns("ITEM DESCRIPTION", "QTY", contentWidth)).toByteArray(Charsets.US_ASCII))
+            out.write(ESC_BOLD_OFF)
+
+            // Single line under column header
+            out.write(singleLine.toByteArray(Charsets.US_ASCII))
+
+            // 4. Print each item: Item Name left, "1x" right (Bold item name)
+            var totalQty = 0
+            val maxLeftLen = if (config.paperSize == "58mm") 22 else 34
+            val fontBWidth = if (config.paperSize == "58mm") 38 else 52
+
+            for (item in items) {
+                totalQty += item.quantity
+                val qtyStr = "${item.quantity}x"
+
+                // Item Name and Qty in Bold
+                out.write(ESC_BOLD_ON)
+                if (item.productName.length <= maxLeftLen) {
+                    out.write((margin + formatTwoColumns(item.productName, qtyStr, contentWidth)).toByteArray(Charsets.US_ASCII))
+                } else {
+                    val chunks = item.productName.chunked(maxLeftLen)
+                    out.write((margin + formatTwoColumns(chunks[0], qtyStr, contentWidth)).toByteArray(Charsets.US_ASCII))
+                    for (extraChunk in chunks.drop(1)) {
+                        out.write((margin + formatTwoColumns(extraChunk, "", contentWidth)).toByteArray(Charsets.US_ASCII))
+                    }
                 }
                 out.write(ESC_BOLD_OFF)
 
-                // Add special instructions / spice level
+                // Spice Level and Allergy combined on ONE row in SMALL Font B
+                val spiceText = if (!item.spiceLevel.isNullOrBlank()) "Spice: ${item.spiceLevel.trim()}" else ""
+                val allergyList = mutableListOf<String>()
+                item.allergies?.filter { it.isNotBlank() }?.let { allergyList.addAll(it) }
+                if (!item.customAllergies.isNullOrBlank()) {
+                    allergyList.add(item.customAllergies.trim())
+                }
+                if (item.onionFlag == true && !allergyList.any { it.contains("onion", ignoreCase = true) }) {
+                    allergyList.add("No Onion")
+                }
+                if (item.garlicFlag == true && !allergyList.any { it.contains("garlic", ignoreCase = true) }) {
+                    allergyList.add("No Garlic")
+                }
+                val allergyText = if (allergyList.isNotEmpty()) "Allergy: ${allergyList.joinToString(", ")}" else ""
+
+                val spiceAllergyRow = when {
+                    spiceText.isNotBlank() && allergyText.isNotBlank() -> ">> $spiceText | $allergyText"
+                    spiceText.isNotBlank() -> ">> $spiceText"
+                    allergyText.isNotBlank() -> ">> $allergyText"
+                    else -> ""
+                }
+
+                // Switch to Font B (Small Font) for Spice, Allergy, and Note
+                out.write(ESC_FONT_B)
+
+                if (spiceAllergyRow.isNotBlank()) {
+                    val lines = wrapWords(spiceAllergyRow, fontBWidth)
+                    for (line in lines) {
+                        out.write((margin + "$line\n").toByteArray(Charsets.US_ASCII))
+                    }
+                }
+
+                // Special Instructions / Note on a SEPARATE row (Small Font B)
                 if (!item.specialInstructions.isNullOrBlank()) {
-                    out.write("     Note: ${item.specialInstructions}\n".toByteArray(Charsets.US_ASCII))
+                    val noteText = ">> Note: ${item.specialInstructions.trim()}"
+                    val lines = wrapWords(noteText, fontBWidth)
+                    for (line in lines) {
+                        out.write((margin + "$line\n").toByteArray(Charsets.US_ASCII))
+                    }
                 }
-                if (!item.spiceLevel.isNullOrBlank()) {
-                    out.write("     Spice: ${item.spiceLevel}\n".toByteArray(Charsets.US_ASCII))
-                }
+
+                // Switch back to Font A for next item
+                out.write(ESC_FONT_A)
             }
 
-            out.write("$line\n".toByteArray(Charsets.US_ASCII))
+            // Double separator line after items
+            out.write(doubleLine.toByteArray(Charsets.US_ASCII))
 
-            // Feed blank lines before cut
-            val feedCount = config.feedLinesBeforeCut.coerceIn(1, 8)
-            out.write("\n".repeat(feedCount).toByteArray(Charsets.US_ASCII))
+            // 5. Total Items & Total Qty (Bold!)
+            out.write(ESC_BOLD_ON)
+            val summaryLeft = "Total Items: ${items.size}"
+            val summaryRight = "Total Qty: $totalQty"
+            out.write((margin + formatTwoColumns(summaryLeft, summaryRight, contentWidth)).toByteArray(Charsets.US_ASCII))
+            out.write(ESC_BOLD_OFF)
 
-            // Auto-Cut
+            // Double separator line after summary
+            out.write(doubleLine.toByteArray(Charsets.US_ASCII))
+
+            // 6. Tight compact feed before cut (removes excess white space above and below)
+            out.write("\n".toByteArray(Charsets.US_ASCII))
+
+            // Auto-Cut: GS V 66 0 feeds exactly to cutter blade and cuts with zero extra white paper
             if (config.autoCut) {
-                out.write(ESC_CUT_PAPER)
+                out.write(byteArrayOf(0x1D, 0x56, 0x42, 0x00))
             }
+
 
             fullStream.write(out.toByteArray())
         }

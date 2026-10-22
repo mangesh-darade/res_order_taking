@@ -453,6 +453,63 @@ class RestaurantRepository private constructor() {
 
     fun getAllCachedTables(): List<TableItem> = _tables.value
 
+    suspend fun searchCustomers(query: String? = null): Result<List<CustomerItem>> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.getCustomers(search = query?.trim().takeIf { !it.isNullOrBlank() })
+            if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
+                val list = response.body()?.data ?: emptyList()
+                return@withContext Result.success(list)
+            }
+            return@withContext Result.failure(Exception(response.body()?.response?.error ?: "Could not fetch customers"))
+        } catch (e: Exception) {
+            return@withContext Result.failure(e)
+        }
+    }
+
+    suspend fun assignCustomer(
+        orderId: String?,
+        tableId: String?,
+        customerId: String,
+        customerName: String? = null
+    ): Result<OrderBootstrap> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.assignCustomer(
+                orderId = orderId?.takeIf { !it.startsWith("ORD-") },
+                tableId = tableId,
+                customerId = customerId,
+                customerName = customerName
+            )
+            if (response.isSuccessful && response.body()?.response?.status == "SUCCESS") {
+                response.body()?.data?.let {
+                    val normalized = updateLocalOrder(it)
+                    return@withContext Result.success(normalized)
+                }
+            }
+            // Fallback / optimistic update
+            val current = _orders.value.find { (orderId != null && it.orderId == orderId) || (tableId != null && it.tableId == tableId) }
+            if (current != null) {
+                val updated = current.copy(
+                    customerId = customerId,
+                    customerName = customerName ?: "Walk-in Customer"
+                )
+                val normalized = updateLocalOrder(updated)
+                return@withContext Result.success(normalized)
+            }
+            return@withContext Result.failure(Exception(response.body()?.response?.error ?: "Failed to assign customer"))
+        } catch (e: Exception) {
+            val current = _orders.value.find { (orderId != null && it.orderId == orderId) || (tableId != null && it.tableId == tableId) }
+            if (current != null) {
+                val updated = current.copy(
+                    customerId = customerId,
+                    customerName = customerName ?: "Walk-in Customer"
+                )
+                val normalized = updateLocalOrder(updated)
+                return@withContext Result.success(normalized)
+            }
+            return@withContext Result.failure(e)
+        }
+    }
+
     suspend fun createOrder(tableId: String, guestCount: Int): Result<OrderBootstrap> = withContext(Dispatchers.IO) {
         try {
             val response = api.createOrder(tableId, guestCount)
@@ -649,7 +706,16 @@ class RestaurantRepository private constructor() {
                 list = list.filter { it.vegType.equals(mealType, ignoreCase = true) }
             }
             if (!search.isNullOrBlank()) {
-                list = list.filter { it.name.contains(search, ignoreCase = true) }
+                val matchingCatIds = _categories.value
+                    .filter { it.name.contains(search, ignoreCase = true) }
+                    .map { it.id }
+                    .toSet()
+                list = list.filter {
+                    it.name.contains(search, ignoreCase = true) ||
+                    (!it.code.isNullOrBlank() && it.code.contains(search, ignoreCase = true)) ||
+                    (!it.categoryName.isNullOrBlank() && it.categoryName.contains(search, ignoreCase = true)) ||
+                    (!it.categoryId.isNullOrBlank() && it.categoryId in matchingCatIds)
+                }
             }
             return@withContext Result.success(list)
         }

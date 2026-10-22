@@ -103,12 +103,31 @@ data class GuestOrder(
 )
 
 @JsonClass(generateAdapter = true)
+data class CustomerItem(
+    @Json(name = "id") val id: String,
+    @Json(name = "name") val name: String,
+    @Json(name = "company") val company: String? = null,
+    @Json(name = "phone") val phone: String? = null,
+    @Json(name = "email") val email: String? = null,
+    @Json(name = "display_name") val displayName: String? = null,
+    @Json(name = "cf1") val cf1: String? = null,
+    @Json(name = "cf2") val cf2: String? = null,
+    @Json(name = "cf3") val cf3: String? = null,
+    @Json(name = "cf4") val cf4: String? = null,
+    @Json(name = "cf5") val cf5: String? = null,
+    @Json(name = "cf6") val cf6: String? = null,
+    @Json(name = "custom_fields_summary") val customFieldsSummary: String? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class OrderBootstrap(
     @Json(name = "order_id") val orderId: String? = null,
     @Json(name = "table_id") val tableId: String? = null,
     @Json(name = "table_number") val tableNumber: String? = null,
     @Json(name = "section_name") val sectionName: String? = null,
     @Json(name = "subsection_name") val subsectionName: String? = null,
+    @Json(name = "customer_id") val customerId: String? = "1",
+    @Json(name = "customer_name") val customerName: String? = "Walk-in Customer",
     @Json(name = "guest_count") val guestCount: Int = 1,
     @Json(name = "status") val status: String = "active", // "active", "kot_sent", "ready", "served", "finalized"
     @Json(name = "guests") val guests: List<GuestOrder> = emptyList(),
@@ -137,7 +156,9 @@ data class MenuItem(
     @Json(name = "stock_warning") val stockWarning: Boolean? = false,
     @Json(name = "station") val station: String? = null,
     @Json(name = "division_id") val divisionId: String? = null,
-    @Json(name = "division_name") val divisionName: String? = null
+    @Json(name = "division_name") val divisionName: String? = null,
+    @Json(name = "code") val code: String? = null,
+    @Json(name = "category_name") val categoryName: String? = null
 )
 
 @JsonClass(generateAdapter = true)

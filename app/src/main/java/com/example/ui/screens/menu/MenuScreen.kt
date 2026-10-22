@@ -1,4 +1,4 @@
-﻿package com.example.ui.screens.menu
+package com.example.ui.screens.menu
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -125,7 +125,7 @@ fun MenuScreen(
             OutlinedTextField(
                 value = uiState.searchQuery,
                 onValueChange = { viewModel.setSearchQuery(it) },
-                placeholder = { Text("Search menu items...", fontSize = 14.sp) },
+                placeholder = { Text("Search by dish, code, or category...", fontSize = 14.sp) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = PinkPrimary) },
                 singleLine = true,
                 shape = RoundedCornerShape(8.dp),
@@ -358,7 +358,7 @@ fun MenuItemCard(
                     }
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = item.name,
+                        text = if (!item.code.isNullOrBlank()) "${item.name} (${item.code})" else item.name,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextDark,
