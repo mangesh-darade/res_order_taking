@@ -30,6 +30,8 @@ data class TablesUiState(
     val availableSubsections: List<com.example.data.model.Subsection> = emptyList(),
     val confirmDialogTable: TableItem? = null,
     val reserveDialogTable: TableItem? = null,
+    // Flag to open reservation dialog directly in edit mode when user taps Edit from bookings list
+    val isEditReservationMode: Boolean = false,
     val opsDialogTable: TableItem? = null,
     val freeActionsDialogTable: TableItem? = null,
     val pickTargetMode: String? = null, // "transfer" | "merge"
@@ -312,6 +314,7 @@ class TablesViewModel(
         _uiState.value = _uiState.value.copy(
             confirmDialogTable = null,
             reserveDialogTable = null,
+            isEditReservationMode = false,
             reservationsDialogTable = null,
             opsDialogTable = null,
             freeActionsDialogTable = null,
@@ -319,9 +322,11 @@ class TablesViewModel(
         )
     }
 
-    fun showReserveDialog(table: TableItem) {
+    // Opens reserve table dialog, optionally pre-entering edit mode for editing an existing reservation
+    fun showReserveDialog(table: TableItem, startInEditMode: Boolean = false) {
         _uiState.value = _uiState.value.copy(
             reserveDialogTable = table,
+            isEditReservationMode = startInEditMode,
             reservationsDialogTable = null,
             freeActionsDialogTable = null
         )

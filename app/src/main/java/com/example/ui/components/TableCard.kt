@@ -39,7 +39,25 @@ fun TableCard(
     onViewReservations: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val statusLower = table.status.lowercase()
+    val now = System.currentTimeMillis()
+    val fromMillis = parseReservedMillis(table.reservedFrom)
+    val untilMillis = parseReservedMillis(table.reservedUntil)
+    // Actively reserved ONLY during [reservedFrom - 30m, reservedUntil]
+    val isWithinReservationWindow = if (fromMillis != null && untilMillis != null) {
+        val bufferStart = fromMillis - 30 * 60 * 1000L
+        now in bufferStart..untilMillis
+    } else if (untilMillis != null) {
+        now <= untilMillis
+    } else {
+        true
+    }
+
+    val rawStatusLower = table.status.lowercase()
+    val statusLower = if (rawStatusLower == "reserved" && !isWithinReservationWindow) {
+        "available"
+    } else {
+        rawStatusLower
+    }
     val isOrderPlaced = statusLower in listOf("order-placed", "placed", "kitchen", "kot_sent")
     val isReady = statusLower == "ready" || statusLower == "order-ready"
 
@@ -49,7 +67,7 @@ fun TableCard(
         isOrderPlaced -> Color(0xFFFF7EB6)
         isReady -> Color(0xFFC8E6C9)
         statusLower == "served" -> Color(0xFFE9D5FF) // Pastel Purple from DB
-        statusLower == "reserved" -> Color(0xFFFFFF99)
+        statusLower == "reserved" -> Color(0xFFFEF08A) // Warm Pastel Yellow
         statusLower == "free" -> Color(0xFFFFCDD2)
         else -> Color(0xFFFFFFFF) // Available = White
     }
@@ -59,14 +77,23 @@ fun TableCard(
         isOrderPlaced -> Color(0xFFBE185D)
         isReady -> Color(0xFF16A34A)
         statusLower == "served" -> Color(0xFF9333EA) // Deep Purple from DB
-        statusLower == "reserved" -> Color(0xFF856404)
+        statusLower == "reserved" -> Color(0xFF854D0E) // Deep Amber Brown
         statusLower == "free" -> Color(0xFFB71C1C)
         else -> PinkPrimary
     }
 
-    val cardBg = parseHexColorSafely(table.statusColor, defaultCardBg)
-    val tableTextColor = parseHexColorSafely(table.statusTextColor, defaultTextColor)
     val isAvailable = statusLower == "available"
+    // Use white background and pink text for available tables even if stale reservation color is present
+    val cardBg = when {
+        statusLower == "reserved" -> Color(0xFFFEF08A)
+        isAvailable -> Color(0xFFFFFFFF)
+        else -> parseHexColorSafely(table.statusColor, defaultCardBg)
+    }
+    val tableTextColor = when {
+        statusLower == "reserved" -> Color(0xFF854D0E)
+        isAvailable -> PinkPrimary
+        else -> parseHexColorSafely(table.statusTextColor, defaultTextColor)
+    }
 
     val displayTime = formatDisplayTime(table.occupiedTime)
     val reservedUntilShort = if (statusLower == "reserved") {
@@ -102,7 +129,11 @@ fun TableCard(
             .clip(cardShape)
             .border(
                 width = 1.5.dp,
-                color = if (isAvailable) PinkPrimary.copy(alpha = 0.4f) else tableTextColor.copy(alpha = 0.5f),
+                color = when {
+                    statusLower == "reserved" -> Color(0xFFEAB308)
+                    isAvailable -> PinkPrimary.copy(alpha = 0.4f)
+                    else -> tableTextColor.copy(alpha = 0.5f)
+                },
                 shape = cardShape
             )
             .combinedClickable(
@@ -127,14 +158,22 @@ fun TableCard(
             ) {
                 Surface(
                     shape = RoundedCornerShape(6.dp),
-                    color = if (isAvailable) PinkPrimary.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.3f),
+                    color = when {
+                        statusLower == "reserved" -> Color(0xFFFDE047)
+                        isAvailable -> PinkPrimary.copy(alpha = 0.15f)
+                        else -> Color.White.copy(alpha = 0.3f)
+                    },
                     modifier = Modifier.padding(2.dp)
                 ) {
                     Text(
                         text = headerLabel,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (isAvailable) PinkPrimary else tableTextColor,
+                        color = when {
+                            statusLower == "reserved" -> Color(0xFF854D0E)
+                            isAvailable -> PinkPrimary
+                            else -> tableTextColor
+                        },
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         maxLines = 1
                     )
@@ -213,14 +252,14 @@ fun TableCard(
                         if (!table.reservedBy.isNullOrBlank()) {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
-                                color = tableTextColor.copy(alpha = 0.12f),
+                                color = Color(0xFFFDE047).copy(alpha = 0.6f),
                                 modifier = Modifier.padding(top = 3.dp)
                             ) {
                                 Text(
                                     text = table.reservedBy,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = tableTextColor,
+                                    color = Color(0xFF854D0E),
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                     maxLines = 1
@@ -305,3 +344,24 @@ private fun parseHexColorSafely(hex: String?, fallback: Color): Color {
         fallback
     }
 }
+
+private fun parseReservedMillis(raw: String?): Long? {
+    if (raw.isNullOrBlank()) return null
+    val cleaned = raw.trim().replace('T', ' ')
+    val formats = listOf(
+        "yyyy-MM-dd HH:mm:ss",
+        "yyyy-MM-dd HH:mm",
+        "yyyy-MM-dd hh:mm a",
+        "yyyy-MM-dd hh:mm:ss a"
+    )
+    for (fmt in formats) {
+        try {
+            val sdf = java.text.SimpleDateFormat(fmt, java.util.Locale.US)
+            sdf.isLenient = true
+            val parsed = sdf.parse(cleaned)
+            if (parsed != null) return parsed.time
+        } catch (_: Exception) {}
+    }
+    return null
+}
+

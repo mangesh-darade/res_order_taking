@@ -44,7 +44,10 @@ private const val SETTINGS_ADMIN_PASS = "Darade@554"
 @Composable
 fun SettingsDialog(
     onDismissRequest: () -> Unit,
-    onSetupSaved: (() -> Unit)? = null
+    onSetupSaved: (() -> Unit)? = null,
+    initialTab: Int = 0,
+    startUnlocked: Boolean = false,
+    disableApiTab: Boolean = false
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -52,12 +55,14 @@ fun SettingsDialog(
     // Ensure manager is initialized
     LaunchedEffect(Unit) {
         ApiSettingsManager.init(context)
-        // Never reopen settings unlocked — always require hard-coded admin login
-        ApiSettingsManager.setAdminLoggedIn(context, false)
+        if (!startUnlocked) {
+            // Never reopen settings unlocked — always require hard-coded admin login
+            ApiSettingsManager.setAdminLoggedIn(context, false)
+        }
     }
 
-    // Always start locked; no persisted bypass
-    var isLoggedIn by remember { mutableStateOf(false) }
+    // Always start locked; no persisted bypass unless startUnlocked is true
+    var isLoggedIn by remember { mutableStateOf(startUnlocked) }
 
     // Login Form State
     var username by remember { mutableStateOf("") }
@@ -66,7 +71,7 @@ fun SettingsDialog(
     var passwordVisible by remember { mutableStateOf(false) }
 
     // Settings Form State
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableStateOf(if (disableApiTab) 1 else initialTab) }
     var baseUrlInput by remember { mutableStateOf(ApiSettingsManager.baseUrl) }
     var apiKeyInput by remember { mutableStateOf(ApiSettingsManager.apiKey) }
     var isTestingConnection by remember { mutableStateOf(false) }
@@ -157,7 +162,7 @@ fun SettingsDialog(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    imageVector = Icons.Default.Settings,
+                                    imageVector = if (selectedTab == 1 && isLoggedIn) Icons.Default.Print else Icons.Default.Settings,
                                     contentDescription = null,
                                     tint = PinkPrimary,
                                     modifier = Modifier.size(20.dp)
@@ -166,7 +171,7 @@ fun SettingsDialog(
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = if (isLoggedIn) "API Configuration" else "Admin Login",
+                            text = if (isLoggedIn) (if (selectedTab == 1) "Thermal Printers" else "API Configuration") else "Admin Login",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextDark
@@ -321,15 +326,17 @@ fun SettingsDialog(
                             )
                         }
 
-                        TextButton(
-                            onClick = {
-                                ApiSettingsManager.setAdminLoggedIn(context, false)
-                                isLoggedIn = false
-                                Toast.makeText(context, "Logged out", Toast.LENGTH_SHORT).show()
-                            },
-                            contentPadding = PaddingValues(0.dp)
-                        ) {
-                            Text("LOGOUT", fontSize = 11.sp, color = PinkPrimary, fontWeight = FontWeight.Bold)
+                        if (!disableApiTab) {
+                            TextButton(
+                                onClick = {
+                                    ApiSettingsManager.setAdminLoggedIn(context, false)
+                                    isLoggedIn = false
+                                    Toast.makeText(context, "Logged out", Toast.LENGTH_SHORT).show()
+                                },
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Text("LOGOUT", fontSize = 11.sp, color = PinkPrimary, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
 
@@ -343,14 +350,26 @@ fun SettingsDialog(
                         modifier = Modifier.fillMaxWidth().height(42.dp)
                     ) {
                         Tab(
-                            selected = selectedTab == 0,
-                            onClick = { selectedTab = 0 },
-                            text = { Text("Server & API", fontSize = 12.sp, fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal) }
+                            selected = selectedTab == 0 && !disableApiTab,
+                            enabled = !disableApiTab,
+                            onClick = {
+                                if (!disableApiTab) {
+                                    selectedTab = 0
+                                }
+                            },
+                            text = {
+                                Text(
+                                    text = "Server & API",
+                                    fontSize = 12.sp,
+                                    fontWeight = if (selectedTab == 0 && !disableApiTab) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (disableApiTab) Color(0xFFBDBDBD) else (if (selectedTab == 0) PinkPrimary else TextDark)
+                                )
+                            }
                         )
                         Tab(
-                            selected = selectedTab == 1,
+                            selected = selectedTab == 1 || disableApiTab,
                             onClick = { selectedTab = 1 },
-                            text = { Text("Thermal Printers", fontSize = 12.sp, fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal) }
+                            text = { Text("Thermal Printers", fontSize = 12.sp, fontWeight = if (selectedTab == 1 || disableApiTab) FontWeight.Bold else FontWeight.Normal) }
                         )
                     }
 

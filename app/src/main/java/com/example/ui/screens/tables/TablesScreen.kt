@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -35,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -348,8 +350,8 @@ fun TablesScreen(
                         StatusFilterOption(
                             key = "RESERVED",
                             label = "Reserved ($resCount)",
-                            bgColor = Color(0xFFFFFF99),
-                            textColor = Color(0xFF856404),
+                            bgColor = Color(0xFFFEF08A),
+                            textColor = Color(0xFF854D0E),
                             borderColor = Color(0xFFFDE047),
                             selectedBorderColor = Color(0xFFB45309)
                         ),
@@ -709,6 +711,21 @@ fun TablesScreen(
             onCancelReservation = { resId ->
                 val tableId = uiState.reservationsDialogTable!!.id
                 viewModel.cancelReservation(resId, tableId)
+            },
+            // Open reservation dialog pre-filled with selected reservation in edit mode
+            onEditReservation = { res ->
+                val currentTable = uiState.reservationsDialogTable!!
+                val editTable = currentTable.copy(
+                    status = "reserved",
+                    reservationId = res.id,
+                    reservedBy = res.customerName,
+                    customerPhone = res.customerPhone,
+                    guestsCount = res.guestCount,
+                    reservedFrom = res.reservedFrom,
+                    reservedUntil = res.reservedTo,
+                    reservedNote = res.notes
+                )
+                viewModel.showReserveDialog(editTable, startInEditMode = true)
             }
         )
     }
@@ -717,6 +734,7 @@ fun TablesScreen(
         val currentTable = uiState.reserveDialogTable!!
         ReserveTableDialog(
             table = currentTable,
+            initialEditMode = uiState.isEditReservationMode,
             onDismiss = { viewModel.dismissConfirmDialog() },
             onReserve = { by, from, until, note, phone, guests, isEdit ->
                 viewModel.reserveTable(
@@ -745,34 +763,35 @@ fun TablesScreen(
 @Composable
 private fun ReserveTableDialog(
     table: TableItem,
+    initialEditMode: Boolean = false,
     onDismiss: () -> Unit,
     onReserve: (reservedBy: String, reservedFrom: String, reservedUntil: String, reservedNote: String?, phone: String?, guests: Int, isEdit: Boolean) -> Unit,
     onUnreserve: () -> Unit,
     onStartOrder: () -> Unit
 ) {
     val isReserved = table.status.lowercase() == "reserved"
-    var editMode by remember(table.id) { mutableStateOf(!isReserved) }
-    var isBookingNewSlot by remember(table.id) { mutableStateOf(false) }
+    var editMode by remember(table.id, table.reservationId) { mutableStateOf(initialEditMode || !isReserved) }
+    var isBookingNewSlot by remember(table.id, table.reservationId) { mutableStateOf(false) }
 
-    var reservedBy by remember(table.id) {
+    var reservedBy by remember(table.id, table.reservationId) {
         mutableStateOf(if (isReserved) table.reservedBy.orEmpty() else "")
     }
-    var customerPhone by remember(table.id) {
+    var customerPhone by remember(table.id, table.reservationId) {
         mutableStateOf(if (isReserved) table.customerPhone.orEmpty() else "")
     }
-    var guestCountStr by remember(table.id) {
+    var guestCountStr by remember(table.id, table.reservationId) {
         mutableStateOf((table.guestsCount?.takeIf { it > 0 } ?: 2).toString())
     }
-    var reservedFromMillis by remember(table.id) {
+    var reservedFromMillis by remember(table.id, table.reservationId) {
         mutableStateOf(
             if (isReserved) (parseReservedUntilMillis(table.reservedFrom) ?: System.currentTimeMillis())
             else System.currentTimeMillis()
         )
     }
-    var reservedUntilMillis by remember(table.id) {
+    var reservedUntilMillis by remember(table.id, table.reservationId) {
         mutableStateOf(parseReservedUntilMillis(table.reservedUntil) ?: defaultReservedUntilMillis())
     }
-    var reservedNote by remember(table.id) {
+    var reservedNote by remember(table.id, table.reservationId) {
         mutableStateOf(if (isReserved) table.reservedNote.orEmpty() else "")
     }
     var formError by remember(table.id) { mutableStateOf<String?>(null) }
@@ -1196,8 +1215,13 @@ private fun ReserveTableDialog(
                     ) {
                         OutlinedTextField(
                             value = customerPhone,
-                            onValueChange = { customerPhone = it },
-                            label = { Text("Phone") },
+                            onValueChange = { input ->
+                                if (input.all { it.isDigit() || it == '+' || it == ' ' || it == '-' }) {
+                                    customerPhone = input
+                                    formError = null
+                                }
+                            },
+                            label = { Text("Phone *") },
                             placeholder = { Text("Mobile No.") },
                             leadingIcon = {
                                 Icon(
@@ -1208,6 +1232,7 @@ private fun ReserveTableDialog(
                                 )
                             },
                             singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.weight(1.1f)
                         )
@@ -1350,13 +1375,41 @@ private fun ReserveTableDialog(
                         Button(
                             onClick = {
                                 val by = reservedBy.trim()
-                                val normalizedFrom = formatMillisForApi(reservedFromMillis)
-                                val normalizedUntil = formatMillisForApi(reservedUntilMillis)
+                                val phone = customerPhone.trim()
+                                val phoneDigits = phone.filter { it.isDigit() }
                                 val guests = guestCountStr.toIntOrNull() ?: 1
                                 val isEditAction = isReserved && editMode && !isBookingNewSlot
+                                val nowMillis = System.currentTimeMillis()
+
+                                val todayStartUtc = startOfDayUtcMillis(nowMillis)
+                                val fromDateUtc = startOfDayUtcMillis(reservedFromMillis)
+                                val isFromToday = fromDateUtc == todayStartUtc
+
+                                // If reservation is for today and start time was set earlier today (or before form submission),
+                                // use current time as effective start time so the user is never falsely blocked
+                                val effectiveFromMillis = if (isFromToday && reservedFromMillis < nowMillis) {
+                                    nowMillis
+                                } else {
+                                    reservedFromMillis
+                                }
+
+                                val normalizedFrom = formatMillisForApi(effectiveFromMillis)
+                                val normalizedUntil = formatMillisForApi(reservedUntilMillis)
+
                                 when {
-                                    by.isEmpty() -> formError = "Customer Name is required"
-                                    reservedUntilMillis <= reservedFromMillis ->
+                                    by.isEmpty() ->
+                                        formError = "Customer Name is required"
+                                    by.length < 2 ->
+                                        formError = "Customer Name must be at least 2 characters"
+                                    phone.isEmpty() ->
+                                        formError = "Phone number is required"
+                                    phoneDigits.length < 10 ->
+                                        formError = "Please enter a valid 10-digit mobile number"
+                                    fromDateUtc < todayStartUtc ->
+                                        formError = "Reservation date cannot be in the past"
+                                    reservedUntilMillis <= nowMillis ->
+                                        formError = "Reserved Until time must be in the future"
+                                    reservedUntilMillis <= effectiveFromMillis ->
                                         formError = "Reserved Until must be after From time"
                                     else -> {
                                         formError = null
@@ -1365,7 +1418,7 @@ private fun ReserveTableDialog(
                                             normalizedFrom,
                                             normalizedUntil,
                                             reservedNote.trim().ifEmpty { null },
-                                            customerPhone.trim().ifEmpty { null },
+                                            phone,
                                             guests,
                                             isEditAction
                                         )
@@ -1422,7 +1475,13 @@ private fun ReserveTableDialog(
             yearRange = IntRange(
                 Calendar.getInstance().get(Calendar.YEAR),
                 Calendar.getInstance().get(Calendar.YEAR) + 2
-            )
+            ),
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    val todayUtc = startOfDayUtcMillis(System.currentTimeMillis())
+                    return utcTimeMillis >= todayUtc
+                }
+            }
         )
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
@@ -1450,13 +1509,13 @@ private fun ReserveTableDialog(
 
     if (showTimePicker) {
         val targetMillis = if (pickingForFrom) reservedFromMillis else reservedUntilMillis
-        val targetCal = remember(targetMillis) {
+        val targetCal = remember(pickingForFrom, targetMillis) {
             Calendar.getInstance().apply { timeInMillis = targetMillis }
         }
         val timePickerState = rememberTimePickerState(
             initialHour = targetCal.get(Calendar.HOUR_OF_DAY),
             initialMinute = targetCal.get(Calendar.MINUTE),
-            is24Hour = true
+            is24Hour = false
         )
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
@@ -1497,20 +1556,26 @@ private fun defaultReservedUntilMillis(): Long =
 
 private fun parseReservedUntilMillis(raw: String?): Long? {
     if (raw.isNullOrBlank()) return null
-    return try {
-        val cleaned = raw.trim().replace('T', ' ').let {
-            if (Regex("""^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$""").matches(it)) "$it:00" else it
-        }
-        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-        sdf.isLenient = false
-        sdf.parse(cleaned)?.time
-    } catch (_: Exception) {
-        null
+    val cleaned = raw.trim().replace('T', ' ')
+    val formats = listOf(
+        "yyyy-MM-dd HH:mm:ss",
+        "yyyy-MM-dd HH:mm",
+        "yyyy-MM-dd hh:mm a",
+        "yyyy-MM-dd hh:mm:ss a"
+    )
+    for (fmt in formats) {
+        try {
+            val sdf = java.text.SimpleDateFormat(fmt, Locale.US)
+            sdf.isLenient = true
+            val parsed = sdf.parse(cleaned)
+            if (parsed != null) return parsed.time
+        } catch (_: Exception) {}
     }
+    return null
 }
 
 private fun formatMillisForField(millis: Long): String {
-    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
+    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.US)
     return sdf.format(java.util.Date(millis))
 }
 
@@ -1577,7 +1642,8 @@ private fun TableReservationsDialog(
     isLoading: Boolean,
     onDismiss: () -> Unit,
     onBookNewSlot: () -> Unit,
-    onCancelReservation: (reservationId: String) -> Unit
+    onCancelReservation: (reservationId: String) -> Unit,
+    onEditReservation: (reservation: TableReservation) -> Unit = {}
 ) {
     var reservationToCancel by remember { mutableStateOf<TableReservation?>(null) }
 
@@ -1689,13 +1755,27 @@ private fun TableReservationsDialog(
                                         )
                                     }
                                     if (!isSeated) {
-                                        TextButton(
-                                            onClick = { reservationToCancel = res },
-                                            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFDC2626)),
-                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                                            modifier = Modifier.height(26.dp)
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Text("Cancel", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            // Edit button to edit this specific reservation
+                                            TextButton(
+                                                onClick = { onEditReservation(res) },
+                                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF0284C7)),
+                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                                modifier = Modifier.height(26.dp)
+                                            ) {
+                                                Text("Edit", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                            TextButton(
+                                                onClick = { reservationToCancel = res },
+                                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFDC2626)),
+                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                                modifier = Modifier.height(26.dp)
+                                            ) {
+                                                Text("Cancel", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
                                         }
                                     }
                                 }

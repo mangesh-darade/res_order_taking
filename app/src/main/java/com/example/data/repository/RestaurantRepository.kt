@@ -581,7 +581,7 @@ class RestaurantRepository private constructor() {
         } ?: _orders.value.firstOrNull() ?: return@withContext Result.failure(Exception("Order not found"))
 
         val currentIndividualGuests = order.guests.filter { it.guestId != 0 }
-        val currentGuestCount = maxOf(order.guestCount, currentIndividualGuests.size, 1)
+        val currentGuestCount = if (order.guestCount > 0) order.guestCount else maxOf(order.guestCount, currentIndividualGuests.size, 1)
         val newCount = (currentGuestCount + delta).coerceAtLeast(1)
 
         val guests = if (newCount > currentIndividualGuests.size) {
@@ -1456,7 +1456,7 @@ class RestaurantRepository private constructor() {
 
     private fun updateLocalOrder(order: OrderBootstrap): OrderBootstrap {
         val individualGuests = order.guests.filter { it.guestId != 0 }
-        val normalizedGuestCount = maxOf(order.guestCount, individualGuests.size, 1)
+        val normalizedGuestCount = if (order.guestCount > 0) order.guestCount else maxOf(order.guestCount, individualGuests.size, 1)
 
         val tableItemsGuest = order.guests.find { it.guestId == 0 } ?: GuestOrder(guestId = 0, guestName = "Table Items (All Guests)", items = emptyList())
         val guaranteedGuests = (1..normalizedGuestCount).map { gId ->
@@ -1507,13 +1507,19 @@ class RestaurantRepository private constructor() {
         var updatedRow: TableItem? = null
         _tables.value = _tables.value.map { t ->
             if (t.id == tableId) {
+                // Clear reservation metadata and colors when table is no longer reserved
                 val next = t.copy(
                     status = newStatus,
                     guestsCount = guests,
                     orderId = orderId,
                     reservedBy = if (clearReservation && newStatus != "reserved") null else (reservedBy ?: t.reservedBy),
                     reservedUntil = if (clearReservation && newStatus != "reserved") null else (reservedUntil ?: t.reservedUntil),
-                    reservedNote = if (clearReservation && newStatus != "reserved") null else (reservedNote ?: t.reservedNote)
+                    reservedNote = if (clearReservation && newStatus != "reserved") null else (reservedNote ?: t.reservedNote),
+                    reservedFrom = if (clearReservation && newStatus != "reserved") null else t.reservedFrom,
+                    reservationId = if (clearReservation && newStatus != "reserved") null else t.reservationId,
+                    customerPhone = if (clearReservation && newStatus != "reserved") null else t.customerPhone,
+                    statusColor = if (clearReservation && newStatus != "reserved") null else t.statusColor,
+                    statusTextColor = if (clearReservation && newStatus != "reserved") null else t.statusTextColor
                 )
                 updatedRow = next
                 next

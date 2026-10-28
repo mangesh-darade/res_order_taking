@@ -54,6 +54,7 @@ fun TopHeaderBar(
     val isGracePeriodExpired by syncManager.isGracePeriodExpired.collectAsState()
 
     var showSyncDialog by remember { mutableStateOf(false) }
+    var showPrinterSettingsDialog by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -305,6 +306,32 @@ fun TopHeaderBar(
 
                     HorizontalDivider(color = Color(0xFFEEEEEE))
 
+                    // Thermal Printers Option
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "Thermal Printers",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = TextDark
+                            )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            showPrinterSettingsDialog = true
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Print,
+                                contentDescription = null,
+                                tint = PinkPrimary
+                            )
+                        },
+                        modifier = Modifier.testTag("menu_thermal_printers")
+                    )
+
+                    HorizontalDivider(color = Color(0xFFEEEEEE))
+
                     // Server & API Settings: only on Login gear (Darade auth) — hidden after login
                     if (currentUser != null && onLogoutClick != null) {
                         DropdownMenuItem(
@@ -328,6 +355,15 @@ fun TopHeaderBar(
 
     if (showSyncDialog) {
         SyncStatusDialog(onDismissRequest = { showSyncDialog = false })
+    }
+
+    if (showPrinterSettingsDialog) {
+        SettingsDialog(
+            onDismissRequest = { showPrinterSettingsDialog = false },
+            initialTab = 1,
+            startUnlocked = true,
+            disableApiTab = true
+        )
     }
 }
 
